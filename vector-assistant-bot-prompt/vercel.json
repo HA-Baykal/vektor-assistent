@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "next build && npx drizzle-kit push --force",
+  "devCommand": "next dev",
+  "installCommand": "npm install"
+}
