@@ -21,7 +21,6 @@ type Deal = {
 
 const CATEGORIES = ["Кондиционер", "Окна", "Вентиляция", "Бурение", "Объект"];
 
-// Иконки для категорий
 const CATEGORY_ICONS: Record<string, string> = {
   "Кондиционер": "❄️",
   "Окна": "🪟",
@@ -139,79 +138,72 @@ export default function FinancePage() {
   const totalRevenue = filtered.reduce((s, d) => s + d.saleAmount, 0);
   const totalDeals = filtered.length;
 
-  // Сортируем сделки — новые сверху
   const sortedFiltered = [...filtered].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="space-y-5 md:space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">💰 Финансы</h1>
-          <p className="text-sm text-slate-500">Учёт сделок и маржинальность</p>
+          <h1 className="text-xl font-bold text-slate-900 md:text-2xl">💰 Финансы</h1>
+          <p className="text-xs text-slate-500 md:text-sm">Учёт сделок и маржинальность</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 active:scale-95"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition active:scale-95 hover:bg-indigo-700"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          {showForm ? "Закрыть" : "Новая сделка"}
+          {showForm ? "Закрыть" : "Сделка"}
         </button>
       </div>
 
       {/* Voice input */}
-      <div className="rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 p-5 shadow-xl">
+      <div className="animate-fade-in-up rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 p-4 shadow-xl md:p-5">
         <div className="mb-3 flex items-center gap-2">
           <span className="text-lg">🎙️</span>
           <h2 className="text-sm font-semibold text-white">Голосовой ввод сделки</h2>
         </div>
         <VoiceInput
           onResult={handleVoiceResult}
-          placeholder='Скажите: "Продал кондиционер за 40 тысяч, купил за 30, монтаж 20, расходка 10"'
+          placeholder='Например: "Продал кондиционер за 40 тысяч, купил за 30, монтаж 20, расходка 10"'
         />
         {message && (
-          <div className={`mt-3 whitespace-pre-line rounded-xl p-3 text-sm ${
+          <div className={`mt-3 whitespace-pre-line rounded-xl p-3 text-xs leading-relaxed md:text-sm ${
             messageType === "success" ? "bg-white/15 text-white" : "bg-red-500/20 text-red-100"
           }`}>
-            {messageType === "success" ? "✅" : "❌"} {message}
+            {message}
           </div>
         )}
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition hover:shadow-md">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-sm">💰</div>
-            <p className="text-xs text-slate-500">Маржа</p>
-          </div>
-          <p className="mt-2 text-xl font-bold text-emerald-600">{formatRub(totalMargin)}</p>
+      {/* Summary cards — на мобилке 3 колонки с меньшим padding */}
+      <div className="animate-fade-in-up grid grid-cols-3 gap-2 md:gap-4" style={{ animationDelay: "0.05s" }}>
+        <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-4">
+          <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-xs md:h-8 md:w-8 md:text-sm">💰</div>
+          <p className="text-[10px] text-center text-slate-500 md:text-xs">Маржа</p>
+          <p className="mt-0.5 text-center text-sm font-bold text-emerald-600 md:text-xl">{formatRub(totalMargin)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition hover:shadow-md">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-sm">📈</div>
-            <p className="text-xs text-slate-500">Выручка</p>
-          </div>
-          <p className="mt-2 text-xl font-bold text-blue-600">{formatRub(totalRevenue)}</p>
+        <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-4">
+          <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-xs md:h-8 md:w-8 md:text-sm">📈</div>
+          <p className="text-[10px] text-center text-slate-500 md:text-xs">Выручка</p>
+          <p className="mt-0.5 text-center text-sm font-bold text-blue-600 md:text-xl">{formatRub(totalRevenue)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition hover:shadow-md">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-sm">📋</div>
-            <p className="text-xs text-slate-500">Сделок</p>
-          </div>
-          <p className="mt-2 text-xl font-bold text-slate-900">{totalDeals}</p>
+        <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-4">
+          <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-xs md:h-8 md:w-8 md:text-sm">📋</div>
+          <p className="text-[10px] text-center text-slate-500 md:text-xs">Сделок</p>
+          <p className="mt-0.5 text-center text-sm font-bold text-slate-900 md:text-xl">{totalDeals}</p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2">
+      <div className="animate-fade-in-up flex flex-wrap gap-1.5 md:gap-2" style={{ animationDelay: "0.1s" }}>
         <button
           onClick={() => setFilter("all")}
-          className={`rounded-xl px-4 py-1.5 text-xs font-semibold transition-all ${
+          className={`rounded-xl px-3 py-1.5 text-[11px] font-semibold transition-all md:px-4 md:py-1.5 md:text-xs ${
             filter === "all"
               ? "bg-slate-900 text-white shadow-md"
               : "bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-700"
@@ -223,7 +215,7 @@ export default function FinancePage() {
           <button
             key={cat}
             onClick={() => setFilter(cat)}
-            className={`rounded-xl px-4 py-1.5 text-xs font-semibold transition-all ${
+            className={`rounded-xl px-3 py-1.5 text-[11px] font-semibold transition-all md:px-4 md:py-1.5 md:text-xs ${
               filter === cat
                 ? "bg-slate-900 text-white shadow-md"
                 : "bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-700"
@@ -236,25 +228,25 @@ export default function FinancePage() {
 
       {/* Manual form */}
       {showForm && (
-        <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
-          <h3 className="mb-4 text-base font-semibold text-slate-900">📝 Новая сделка</h3>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+        <div className="animate-fade-in-up rounded-2xl border border-slate-100 bg-white p-4 shadow-sm md:p-6">
+          <h3 className="mb-4 text-sm font-semibold text-slate-900">📝 Новая сделка</h3>
+          <div className="space-y-3 md:space-y-4">
+            <div className="grid grid-cols-2 gap-3 md:gap-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Дата</label>
+                <label className="mb-1 block text-[11px] font-medium text-slate-400">Дата</label>
                 <input
                   type="date"
                   value={form.date}
                   onChange={(e) => setForm({ ...form, date: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Категория</label>
+                <label className="mb-1 block text-[11px] font-medium text-slate-400">Категория</label>
                 <select
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c}>{c}</option>
@@ -263,57 +255,57 @@ export default function FinancePage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3 md:gap-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Продажа (₽)</label>
+                <label className="mb-1 block text-[11px] font-medium text-slate-400">Продажа (₽)</label>
                 <input
                   type="number"
                   value={form.saleAmount}
                   onChange={(e) => setForm({ ...form, saleAmount: e.target.value })}
                   placeholder="0"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Закупка (₽)</label>
+                <label className="mb-1 block text-[11px] font-medium text-slate-400">Закупка (₽)</label>
                 <input
                   type="number"
                   value={form.purchaseAmount}
                   onChange={(e) => setForm({ ...form, purchaseAmount: e.target.value })}
                   placeholder="0"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Монтаж/работа (₽)</label>
+                <label className="mb-1 block text-[11px] font-medium text-slate-400">Монтаж (₽)</label>
                 <input
                   type="number"
                   value={form.workAmount}
                   onChange={(e) => setForm({ ...form, workAmount: e.target.value })}
                   placeholder="0"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Материалы/расход (₽)</label>
+                <label className="mb-1 block text-[11px] font-medium text-slate-400">Расход (₽)</label>
                 <input
                   type="number"
                   value={form.materialsAmount}
                   onChange={(e) => setForm({ ...form, materialsAmount: e.target.value })}
                   placeholder="0"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                 />
               </div>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Заметки</label>
+              <label className="mb-1 block text-[11px] font-medium text-slate-400">Заметки</label>
               <input
                 type="text"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 placeholder="Описание сделки..."
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
               />
             </div>
 
@@ -325,12 +317,12 @@ export default function FinancePage() {
               const m = parseInt(form.materialsAmount) || 0;
               const margin = s - p + w - m;
               return (
-                <div className={`rounded-xl p-4 ${
+                <div className={`rounded-xl p-3 md:p-4 ${
                   margin >= 0 ? "bg-emerald-50" : "bg-red-50"
                 }`}>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-700">Предварительная маржа:</span>
-                    <span className={`text-lg font-bold ${
+                    <span className="text-xs font-semibold text-slate-700 md:text-sm">Предварительная маржа:</span>
+                    <span className={`text-base font-bold md:text-lg ${
                       margin >= 0 ? "text-emerald-600" : "text-red-600"
                     }`}>
                       {formatRub(margin)}
@@ -340,16 +332,16 @@ export default function FinancePage() {
               );
             })()}
 
-            <div className="flex gap-3">
+            <div className="flex gap-2 md:gap-3">
               <button
                 onClick={handleCreate}
-                className="flex-1 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-white shadow-md shadow-emerald-200 transition hover:bg-emerald-600 active:scale-95"
+                className="flex-1 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-white shadow-md shadow-emerald-200 transition active:scale-95 hover:bg-emerald-600"
               >
-                💾 Создать сделку
+                💾 Создать
               </button>
               <button
                 onClick={() => setShowForm(false)}
-                className="rounded-xl bg-slate-100 px-6 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-200"
+                className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-600 transition active:scale-95 hover:bg-slate-200"
               >
                 Отмена
               </button>
@@ -364,83 +356,80 @@ export default function FinancePage() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600" />
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2 md:space-y-3">
           {sortedFiltered.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-16 text-center">
-              <p className="text-5xl">💰</p>
-              <p className="mt-4 text-sm font-medium text-slate-400">
+            <div className="animate-fade-in-up rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
+              <p className="text-4xl">💰</p>
+              <p className="mt-3 text-sm font-medium text-slate-400">
                 Сделок пока нет
               </p>
-              <p className="text-xs text-slate-300">
-                Добавьте голосовым сообщением или через кнопку «Новая сделка»
+              <p className="mt-1 text-xs text-slate-300">
+                Добавьте голосом или через кнопку «Сделка»
               </p>
             </div>
           )}
           {sortedFiltered.map((deal) => (
             <div
               key={deal.id}
-              className="group cursor-pointer rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-all hover:border-indigo-100 hover:shadow-md"
+              className="group animate-fade-in-up cursor-pointer rounded-2xl border border-slate-100 bg-white p-3.5 shadow-sm transition-all active:scale-[0.99] hover:border-indigo-100 hover:shadow-md md:p-4"
               onClick={() => setSelectedDeal(deal)}
             >
               <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{CATEGORY_ICONS[deal.category] || "📦"}</span>
-                    <span className="rounded-lg bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-600">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 md:gap-2">
+                    <span className="text-sm md:text-lg">{CATEGORY_ICONS[deal.category] || "📦"}</span>
+                    <span className="rounded-lg bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 md:text-xs">
                       {deal.category}
                     </span>
-                    <span className="text-xs text-slate-400">{formatDateRu(deal.date)}</span>
+                    <span className="text-[11px] text-slate-400 md:text-xs">{formatDateRu(deal.date)}</span>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-4">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      <span className="text-slate-400">Продажа:</span>
-                      <span className="font-semibold text-slate-700">{formatRub(deal.saleAmount)}</span>
+                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 md:gap-x-6">
+                    <div className="flex items-center gap-1">
+                      <span className="h-1 w-1 rounded-full bg-emerald-400 md:h-1.5 md:w-1.5" />
+                      <span className="text-[11px] text-slate-400 md:text-xs">Прод:</span>
+                      <span className="text-[11px] font-semibold text-slate-700 md:text-xs">{formatRub(deal.saleAmount)}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                      <span className="text-slate-400">Закупка:</span>
-                      <span className="font-semibold text-red-500">-{formatRub(deal.purchaseAmount)}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="h-1 w-1 rounded-full bg-red-400 md:h-1.5 md:w-1.5" />
+                      <span className="text-[11px] text-slate-400 md:text-xs">Зак:</span>
+                      <span className="text-[11px] font-semibold text-red-500 md:text-xs">-{formatRub(deal.purchaseAmount)}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-                      <span className="text-slate-400">Монтаж:</span>
-                      <span className="font-semibold text-slate-700">{formatRub(deal.workAmount)}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="h-1 w-1 rounded-full bg-blue-400 md:h-1.5 md:w-1.5" />
+                      <span className="text-[11px] text-slate-400 md:text-xs">Монт:</span>
+                      <span className="text-[11px] font-semibold text-slate-700 md:text-xs">{formatRub(deal.workAmount)}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                      <span className="text-slate-400">Расход:</span>
-                      <span className="font-semibold text-amber-600">-{formatRub(deal.materialsAmount)}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="h-1 w-1 rounded-full bg-amber-400 md:h-1.5 md:w-1.5" />
+                      <span className="text-[11px] text-slate-400 md:text-xs">Расх:</span>
+                      <span className="text-[11px] font-semibold text-amber-600 md:text-xs">-{formatRub(deal.materialsAmount)}</span>
                     </div>
                   </div>
                   {deal.notes && (
-                    <p className="mt-2 truncate text-xs text-slate-400">{deal.notes}</p>
+                    <p className="mt-1.5 truncate text-[11px] text-slate-400 md:text-xs">{deal.notes}</p>
                   )}
                 </div>
-                <div className="ml-4 flex flex-col items-end gap-1">
+                <div className="ml-2 flex shrink-0 flex-col items-end gap-0.5 md:ml-4 md:gap-1">
                   <div
-                    className={`rounded-xl px-3 py-1.5 text-right ${
-                      deal.totalMargin >= 0
-                        ? "bg-emerald-50"
-                        : "bg-red-50"
+                    className={`rounded-xl px-2 py-1 md:px-3 md:py-1.5 ${
+                      deal.totalMargin >= 0 ? "bg-emerald-50" : "bg-red-50"
                     }`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <p className={`text-sm font-bold ${
+                    <p className={`text-xs font-bold md:text-sm ${
                       deal.totalMargin >= 0 ? "text-emerald-600" : "text-red-600"
                     }`}>
                       {deal.totalMargin >= 0 ? "+" : ""}{formatRub(deal.totalMargin)}
                     </p>
-                    <p className="text-[10px] text-slate-400">маржа</p>
                   </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setDeleteConfirm(deal.id);
                     }}
-                    className="rounded-lg px-2 py-1 text-xs text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                    className="touch-target flex items-center justify-center rounded-lg px-1.5 py-1 text-xs text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 md:px-2"
                   >
-                    🗑️ Удалить
+                    🗑️
                   </button>
                 </div>
               </div>
@@ -452,47 +441,50 @@ export default function FinancePage() {
       {/* Deal Detail Modal */}
       {selectedDeal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm md:items-center"
           onClick={() => setSelectedDeal(null)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+            className="w-full max-w-lg animate-slide-up rounded-2xl rounded-b-none bg-white p-5 shadow-2xl md:rounded-b-2xl md:p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{CATEGORY_ICONS[selectedDeal.category] || "📦"}</span>
+            {/* Handle для мобильного свайпа */}
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-200 md:hidden" />
+
+            <div className="flex items-start justify-between mb-4 md:mb-5">
+              <div className="flex items-center gap-2 md:gap-3">
+                <span className="text-xl md:text-2xl">{CATEGORY_ICONS[selectedDeal.category] || "📦"}</span>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">{selectedDeal.category}</h2>
-                  <p className="text-xs text-slate-400">
+                  <h2 className="text-base font-bold text-slate-900 md:text-lg">{selectedDeal.category}</h2>
+                  <p className="text-[11px] text-slate-400 md:text-xs">
                     {formatDateFull(selectedDeal.date)}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedDeal(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
+                className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400 transition hover:bg-slate-200 hover:text-slate-600 md:h-8 md:w-8"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5 md:space-y-3">
               {/* Доходы */}
-              <div className="rounded-xl bg-emerald-50 p-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-600">Доходы</p>
-                <div className="space-y-2">
+              <div className="rounded-xl bg-emerald-50 p-3 md:p-4">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 md:text-xs">Доходы</p>
+                <div className="space-y-1.5 md:space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Продажа оборудования</span>
-                    <span className="text-sm font-bold text-emerald-600">+{formatRub(selectedDeal.saleAmount)}</span>
+                    <span className="text-xs text-slate-600 md:text-sm">Продажа оборудования</span>
+                    <span className="text-xs font-bold text-emerald-600 md:text-sm">+{formatRub(selectedDeal.saleAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Монтаж и работы</span>
-                    <span className="text-sm font-bold text-emerald-600">+{formatRub(selectedDeal.workAmount)}</span>
+                    <span className="text-xs text-slate-600 md:text-sm">Монтаж и работы</span>
+                    <span className="text-xs font-bold text-emerald-600 md:text-sm">+{formatRub(selectedDeal.workAmount)}</span>
                   </div>
-                  <div className="flex items-center justify-between border-t border-emerald-200 pt-2">
-                    <span className="text-sm font-semibold text-slate-700">Итого доход</span>
-                    <span className="text-sm font-bold text-emerald-700">
+                  <div className="flex items-center justify-between border-t border-emerald-200 pt-1.5 md:pt-2">
+                    <span className="text-xs font-semibold text-slate-700 md:text-sm">Итого доход</span>
+                    <span className="text-xs font-bold text-emerald-700 md:text-sm">
                       +{formatRub(selectedDeal.saleAmount + selectedDeal.workAmount)}
                     </span>
                   </div>
@@ -500,20 +492,20 @@ export default function FinancePage() {
               </div>
 
               {/* Расходы */}
-              <div className="rounded-xl bg-red-50 p-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-600">Расходы</p>
-                <div className="space-y-2">
+              <div className="rounded-xl bg-red-50 p-3 md:p-4">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-red-600 md:text-xs">Расходы</p>
+                <div className="space-y-1.5 md:space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Закупка оборудования</span>
-                    <span className="text-sm font-bold text-red-500">-{formatRub(selectedDeal.purchaseAmount)}</span>
+                    <span className="text-xs text-slate-600 md:text-sm">Закупка оборудования</span>
+                    <span className="text-xs font-bold text-red-500 md:text-sm">-{formatRub(selectedDeal.purchaseAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Материалы и комплектация</span>
-                    <span className="text-sm font-bold text-red-500">-{formatRub(selectedDeal.materialsAmount)}</span>
+                    <span className="text-xs text-slate-600 md:text-sm">Материалы и комплектация</span>
+                    <span className="text-xs font-bold text-red-500 md:text-sm">-{formatRub(selectedDeal.materialsAmount)}</span>
                   </div>
-                  <div className="flex items-center justify-between border-t border-red-200 pt-2">
-                    <span className="text-sm font-semibold text-slate-700">Итого расход</span>
-                    <span className="text-sm font-bold text-red-600">
+                  <div className="flex items-center justify-between border-t border-red-200 pt-1.5 md:pt-2">
+                    <span className="text-xs font-semibold text-slate-700 md:text-sm">Итого расход</span>
+                    <span className="text-xs font-bold text-red-600 md:text-sm">
                       -{formatRub(selectedDeal.purchaseAmount + selectedDeal.materialsAmount)}
                     </span>
                   </div>
@@ -521,19 +513,17 @@ export default function FinancePage() {
               </div>
 
               {/* Итоговая маржа */}
-              <div className={`rounded-xl p-4 ${
+              <div className={`rounded-xl p-3 md:p-4 ${
                 selectedDeal.totalMargin >= 0 ? "bg-slate-900 text-white" : "bg-red-600 text-white"
               }`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
-                      Чистая маржа
-                    </p>
-                    <p className="mt-1 text-xs opacity-70">
-                      Маржа оборудования: {formatRub(selectedDeal.equipmentMargin)} · Маржа работы: {formatRub(selectedDeal.workMargin)}
+                    <p className="text-[10px] font-semibold uppercase tracking-wide opacity-80 md:text-xs">Чистая маржа</p>
+                    <p className="mt-0.5 text-[10px] opacity-70 md:text-xs">
+                      Оборудование: {formatRub(selectedDeal.equipmentMargin)} · Работа: {formatRub(selectedDeal.workMargin)}
                     </p>
                   </div>
-                  <p className="text-2xl font-black">
+                  <p className="text-lg font-black md:text-2xl">
                     {selectedDeal.totalMargin >= 0 ? "+" : ""}{formatRub(selectedDeal.totalMargin)}
                   </p>
                 </div>
@@ -541,27 +531,27 @@ export default function FinancePage() {
 
               {/* Заметки */}
               {selectedDeal.notes && (
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Заметки</p>
-                  <p className="text-sm text-slate-700">{selectedDeal.notes}</p>
+                <div className="rounded-xl bg-slate-50 p-3 md:p-4">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:text-xs">Заметки</p>
+                  <p className="text-xs text-slate-700 md:text-sm">{selectedDeal.notes}</p>
                 </div>
               )}
             </div>
 
             {/* Действия */}
-            <div className="mt-5 flex gap-3">
+            <div className="mt-4 flex gap-2 md:mt-5 md:gap-3">
               <button
                 onClick={() => {
                   setDeleteConfirm(selectedDeal.id);
                   setSelectedDeal(null);
                 }}
-                className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                className="flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2.5 text-xs font-semibold text-red-600 transition active:scale-95 hover:bg-red-50 md:px-4 md:text-sm"
               >
-                🗑️ Удалить сделку
+                🗑️ Удалить
               </button>
               <button
                 onClick={() => setSelectedDeal(null)}
-                className="ml-auto rounded-xl bg-slate-100 px-6 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-200"
+                className="ml-auto rounded-xl bg-slate-100 px-5 py-2.5 text-xs font-semibold text-slate-600 transition active:scale-95 hover:bg-slate-200 md:px-6 md:text-sm"
               >
                 Закрыть
               </button>
@@ -570,33 +560,33 @@ export default function FinancePage() {
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation */}
       {deleteConfirm !== null && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
           onClick={() => setDeleteConfirm(null)}
         >
           <div
-            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"
+            className="w-full max-w-sm animate-fade-in-up rounded-2xl bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-center">
               <p className="text-4xl">⚠️</p>
               <h3 className="mt-3 text-lg font-bold text-slate-900">Удалить сделку?</h3>
               <p className="mt-1 text-sm text-slate-500">
-                Это действие нельзя отменить. Сделка будет удалена навсегда.
+                Это действие нельзя отменить.
               </p>
             </div>
             <div className="mt-6 flex gap-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-200"
+                className="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600 transition active:scale-95 hover:bg-slate-200"
               >
                 Отмена
               </button>
               <button
                 onClick={confirmDelete}
-                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white shadow-md shadow-red-200 transition hover:bg-red-600"
+                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white shadow-md shadow-red-200 transition active:scale-95 hover:bg-red-600"
               >
                 🗑️ Да, удалить
               </button>
