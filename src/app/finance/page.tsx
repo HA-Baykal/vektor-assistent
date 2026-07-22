@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import VoiceInput from "@/components/VoiceInput";
-import { formatRub, formatDateRu, formatDateFull } from "@/lib/parser";
+import { formatRub, formatDateRu, formatDateFull, parseAddition } from "@/lib/parser";
 
 type Deal = {
   id: number;
@@ -89,6 +89,38 @@ export default function FinancePage() {
 
   const handleVoiceResult = async (text: string) => {
     try {
+      // Шаг 1: Проверяем, не "добавка" ли это к существующей сделке
+      const addition = parseAddition(text);
+      if (addition && deals.length > 0) {
+        // Берём последнюю сделку (первую в списке, т.к. сортировка по дате убыв.)
+        const lastDeal = deals[0];
+        const labels: string[] = [];
+        if (addition.addMaterialsAmount > 0) labels.push(`${formatRub(addition.addMaterialsAmount)} на расходку`);
+        if (addition.addPurchaseAmount > 0) labels.push(`${formatRub(addition.addPurchaseAmount)} на закупку`);
+        if (addition.addWorkAmount > 0) labels.push(`${formatRub(addition.addWorkAmount)} на монтаж`);
+
+        const res = await fetch("/api/deals", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: lastDeal.id,
+            addMaterialsAmount: addition.addMaterialsAmount,
+            addPurchaseAmount: addition.addPurchaseAmount,
+            addWorkAmount: addition.addWorkAmount,
+          }),
+        });
+
+        if (!res.ok) throw new Error("Ошибка");
+        const updated = await res.json();
+
+        showMessage(
+          `✅ Добавлено к сделке «${updated.category}»:\n${labels.join("\n")}\n💰 Новая маржа: ${formatRub(updated.totalMargin)}`
+        );
+        fetchDeals();
+        return;
+      }
+
+      // Шаг 2: Если не добавка — создаём новую сделку как обычно
       const res = await fetch("/api/deals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

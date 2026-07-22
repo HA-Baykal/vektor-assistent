@@ -385,6 +385,43 @@ export function formatWeekdayRu(dateStr: string): string {
   return days[d.getDay()];
 }
 
+// Проверяет, является ли текст "добавкой" к существующей сделке (слова "ещё", "добавить", "дополнительно")
+// Возвращает поле, к которому нужно добавить, и сумму
+export type AdditionInfo = {
+  type: "addition";
+  addMaterialsAmount: number;
+  addPurchaseAmount: number;
+  addWorkAmount: number;
+  rawText: string;
+};
+
+export function parseAddition(input: string): AdditionInfo | null {
+  const text = input.trim().toLowerCase();
+
+  // Проверяем маркеры добавления
+  const isAddition = /\b(?:ещё|еще|добав|дополнительно|ещо|доп)\b/i.test(text);
+  if (!isAddition) return null;
+
+  // Проверяем финансовые ключевые слова
+  const hasFinancial = /расход|материал|расходк|комплектац|фреон|кронштейн|закуп|купил|монтаж|работ/.test(text);
+  if (!hasFinancial) return null;
+
+  const addMaterialsAmount = extractDealAmount(text, /расход|материал|расходк|комплектац|фреон|кронштейн|расходн/);
+  const addPurchaseAmount = extractDealAmount(text, /купил|закуп|закупил|купи/);
+  const addWorkAmount = extractDealAmount(text, /монтаж|работа|установк|оплат|монта/);
+
+  // Если нет ни одной суммы — это не добавка
+  if (!addMaterialsAmount && !addPurchaseAmount && !addWorkAmount) return null;
+
+  return {
+    type: "addition",
+    addMaterialsAmount,
+    addPurchaseAmount,
+    addWorkAmount,
+    rawText: input,
+  };
+}
+
 // Форматирует дату полностью: "22 июля 2025, вторник"
 export function formatDateFull(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
