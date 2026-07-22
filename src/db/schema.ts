@@ -29,6 +29,7 @@ export const tasks = pgTable("tasks", {
 export const deals = pgTable("deals", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().default(1),
+  dealNumber: integer("deal_number").notNull().default(0), // Серийный номер сделки
   date: date("date").notNull(),
   category: varchar("category", { length: 50 }).notNull(),
   saleAmount: integer("sale_amount").notNull().default(0),
@@ -39,5 +40,6 @@ export const deals = pgTable("deals", {
   workMargin: integer("work_margin").notNull().default(0),
   totalMargin: integer("total_margin").notNull().default(0),
   notes: text("notes"),
+  activityLog: text("activity_log").notNull().default("[]"), // JSON-массив действий
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

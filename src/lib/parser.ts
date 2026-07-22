@@ -392,6 +392,7 @@ export type AdditionInfo = {
   addMaterialsAmount: number;
   addPurchaseAmount: number;
   addWorkAmount: number;
+  dealNumber?: number; // Номер сделки, к которой добавляем (если указан)
   rawText: string;
 };
 
@@ -399,7 +400,7 @@ export function parseAddition(input: string): AdditionInfo | null {
   const text = input.trim().toLowerCase();
 
   // Проверяем маркеры добавления
-  const isAddition = /\b(?:ещё|еще|добав|дополнительно|ещо|доп)\b/i.test(text);
+  const isAddition = /\b(?:ещё|еще|добав|дополнительно|ещо|доп|потратил|потрач)\b/i.test(text);
   if (!isAddition) return null;
 
   // Проверяем финансовые ключевые слова
@@ -410,6 +411,13 @@ export function parseAddition(input: string): AdditionInfo | null {
   const addPurchaseAmount = extractDealAmount(text, /купил|закуп|закупил|купи/);
   const addWorkAmount = extractDealAmount(text, /монтаж|работа|установк|оплат|монта/);
 
+  // Извлекаем номер сделки: "сделка 34", "сд 34", "номер 34"
+  const dealNumMatch = input.match(/(?:сделк[а-я]+\s*(?:№|#|номер|))\s*(\d+)|(?:№|#|номер)\s*(\d+)/i);
+  let dealNumber: number | undefined;
+  if (dealNumMatch) {
+    dealNumber = parseInt(dealNumMatch[1] || dealNumMatch[2]);
+  }
+
   // Если нет ни одной суммы — это не добавка
   if (!addMaterialsAmount && !addPurchaseAmount && !addWorkAmount) return null;
 
@@ -418,6 +426,7 @@ export function parseAddition(input: string): AdditionInfo | null {
     addMaterialsAmount,
     addPurchaseAmount,
     addWorkAmount,
+    dealNumber,
     rawText: input,
   };
 }

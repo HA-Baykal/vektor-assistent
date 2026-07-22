@@ -43,6 +43,8 @@ export async function GET() {
         equipment_margin INTEGER NOT NULL DEFAULT 0,
         work_margin INTEGER NOT NULL DEFAULT 0,
         total_margin INTEGER NOT NULL DEFAULT 0,
+        deal_number INTEGER NOT NULL DEFAULT 0,
+        activity_log TEXT NOT NULL DEFAULT '[]',
         notes TEXT,
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );

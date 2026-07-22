@@ -6,11 +6,49 @@ import { parseInput } from "@/lib/parser";
 
 export const dynamic = "force-dynamic";
 
+// Тип для записи в логе действий
+type ActivityEntry = {
+  action: string;
+  timestamp: string;
+  details: string;
+  delta?: {
+    saleAmount?: number;
+    purchaseAmount?: number;
+    workAmount?: number;
+    materialsAmount?: number;
+  };
+};
+
+// Парсит activity_log из JSON
+function parseActivityLog(log: string | null): ActivityEntry[] {
+  if (!log) return [];
+  try {
+    return JSON.parse(log);
+  } catch {
+    return [];
+  }
+}
+
+// Возвращает следующий номер сделки для пользователя
+async function getNextDealNumber(userId: number = 1): Promise<number> {
+  const [last] = await db
+    .select({ maxNum: sql<number>`COALESCE(MAX(deal_number), 0)` })
+    .from(deals)
+    .where(eq(deals.userId, userId));
+
+  return (last?.maxNum || 0) + 1;
+}
+
+function now() {
+  return new Date().toISOString().slice(0, 19).replace("T", " ");
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const category = searchParams.get("category");
+  const dealNumber = searchParams.get("dealNumber");
 
   let whereClause: SQL = sql`true`;
   if (from && to) {
@@ -19,12 +57,15 @@ export async function GET(request: Request) {
   if (category) {
     whereClause = and(whereClause, eq(deals.category, category)) as SQL;
   }
+  if (dealNumber) {
+    whereClause = and(whereClause, eq(deals.dealNumber, parseInt(dealNumber))) as SQL;
+  }
 
   const result = await db
     .select()
     .from(deals)
     .where(whereClause)
-    .orderBy(desc(deals.date));
+    .orderBy(desc(deals.dealNumber));
 
   return NextResponse.json(result);
 }
@@ -38,10 +79,29 @@ export async function POST(request: Request) {
     if (parsed.type === "deals" && parsed.deals.length > 0) {
       const created = [];
       for (const deal of parsed.deals) {
+        const dealNumber = await getNextDealNumber();
+        const margin = deal.saleAmount - deal.purchaseAmount + deal.workAmount - deal.materialsAmount;
+
+        // Формируем начальный лог
+        const log: ActivityEntry[] = [
+          {
+            action: "Сделка создана",
+            timestamp: now(),
+            details: `${deal.category} | Продажа: ${deal.saleAmount}₽, Закупка: ${deal.purchaseAmount}₽, Монтаж: ${deal.workAmount}₽, Расход: ${deal.materialsAmount}₽`,
+            delta: {
+              saleAmount: deal.saleAmount,
+              purchaseAmount: deal.purchaseAmount,
+              workAmount: deal.workAmount,
+              materialsAmount: deal.materialsAmount,
+            },
+          },
+        ];
+
         const [row] = await db
           .insert(deals)
           .values({
             userId: 1,
+            dealNumber,
             date: deal.date,
             category: deal.category,
             saleAmount: deal.saleAmount,
@@ -50,12 +110,9 @@ export async function POST(request: Request) {
             materialsAmount: deal.materialsAmount,
             equipmentMargin: deal.saleAmount - deal.purchaseAmount,
             workMargin: deal.workAmount - deal.materialsAmount,
-            totalMargin:
-              deal.saleAmount -
-              deal.purchaseAmount +
-              deal.workAmount -
-              deal.materialsAmount,
+            totalMargin: margin,
             notes: deal.notes,
+            activityLog: JSON.stringify(log),
           })
           .returning();
         created.push(row);
@@ -68,11 +125,23 @@ export async function POST(request: Request) {
   const purchaseAmount = direct.purchaseAmount || 0;
   const workAmount = direct.workAmount || 0;
   const materialsAmount = direct.materialsAmount || 0;
+  const margin = saleAmount - purchaseAmount + workAmount - materialsAmount;
+  const dealNumber = await getNextDealNumber();
+
+  const log: ActivityEntry[] = [
+    {
+      action: "Сделка создана",
+      timestamp: now(),
+      details: `${direct.category || "Объект"} | Продажа: ${saleAmount}₽, Закупка: ${purchaseAmount}₽, Монтаж: ${workAmount}₽, Расход: ${materialsAmount}₽`,
+      delta: { saleAmount, purchaseAmount, workAmount, materialsAmount },
+    },
+  ];
 
   const [row] = await db
     .insert(deals)
     .values({
       userId: 1,
+      dealNumber,
       date: direct.date || new Date().toISOString().slice(0, 10),
       category: direct.category || "Объект",
       saleAmount,
@@ -81,8 +150,9 @@ export async function POST(request: Request) {
       materialsAmount,
       equipmentMargin: saleAmount - purchaseAmount,
       workMargin: workAmount - materialsAmount,
-      totalMargin: saleAmount - purchaseAmount + workAmount - materialsAmount,
+      totalMargin: margin,
       notes: direct.notes || null,
+      activityLog: JSON.stringify(log),
     })
     .returning();
 
@@ -91,39 +161,118 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const body = await request.json();
-  const { id, ...updates } = body;
+  const { id, dealNumber: dn, ...updates } = body;
 
-  if (!id) {
-    return NextResponse.json({ error: "id required" }, { status: 400 });
+  // Ищем сделку либо по id, либо по dealNumber
+  let whereClause;
+  if (dn) {
+    whereClause = eq(deals.dealNumber, dn);
+  } else if (id) {
+    whereClause = eq(deals.id, parseInt(id));
+  } else {
+    return NextResponse.json({ error: "id or dealNumber required" }, { status: 400 });
   }
 
-  // Берём текущие значения из базы
-  const [existing] = await db
-    .select()
-    .from(deals)
-    .where(eq(deals.id, parseInt(id)));
-
+  const [existing] = await db.select().from(deals).where(whereClause);
   if (!existing) {
     return NextResponse.json({ error: "deal not found" }, { status: 404 });
   }
 
-  // Обновляем только переданные поля — используем Partial<typeof deals.$inferInsert>
+  // Обновляем только переданные поля
   const updatedFields: Record<string, number | string | null> = {};
+  let logEntries: ActivityEntry[] = [];
 
-  if (updates.saleAmount !== undefined) updatedFields.saleAmount = Number(updates.saleAmount);
-  if (updates.purchaseAmount !== undefined) updatedFields.purchaseAmount = Number(updates.purchaseAmount);
-  if (updates.workAmount !== undefined) updatedFields.workAmount = Number(updates.workAmount);
-  if (updates.materialsAmount !== undefined) updatedFields.materialsAmount = Number(updates.materialsAmount);
-  // Добавление к существующим значениям (для случаев "добавить расход")
-  if (updates.addSaleAmount) updatedFields.saleAmount = (existing.saleAmount || 0) + Number(updates.addSaleAmount);
-  if (updates.addPurchaseAmount) updatedFields.purchaseAmount = (existing.purchaseAmount || 0) + Number(updates.addPurchaseAmount);
-  if (updates.addWorkAmount) updatedFields.workAmount = (existing.workAmount || 0) + Number(updates.addWorkAmount);
-  if (updates.addMaterialsAmount) updatedFields.materialsAmount = (existing.materialsAmount || 0) + Number(updates.addMaterialsAmount);
-  if (updates.category !== undefined) updatedFields.category = String(updates.category);
-  if (updates.date !== undefined) updatedFields.date = String(updates.date);
-  if (updates.notes !== undefined) updatedFields.notes = String(updates.notes);
+  // Полные замены
+  if (updates.saleAmount !== undefined) {
+    updatedFields.saleAmount = Number(updates.saleAmount);
+    logEntries.push({
+      action: "Продажа изменена",
+      timestamp: now(),
+      details: `${existing.saleAmount}₽ → ${updatedFields.saleAmount}₽`,
+      delta: { saleAmount: Number(updates.saleAmount) - existing.saleAmount },
+    });
+  }
+  if (updates.purchaseAmount !== undefined) {
+    updatedFields.purchaseAmount = Number(updates.purchaseAmount);
+    logEntries.push({
+      action: "Закупка изменена",
+      timestamp: now(),
+      details: `${existing.purchaseAmount}₽ → ${updatedFields.purchaseAmount}₽`,
+      delta: { purchaseAmount: Number(updates.purchaseAmount) - existing.purchaseAmount },
+    });
+  }
+  if (updates.workAmount !== undefined) {
+    updatedFields.workAmount = Number(updates.workAmount);
+    logEntries.push({
+      action: "Монтаж изменён",
+      timestamp: now(),
+      details: `${existing.workAmount}₽ → ${updatedFields.workAmount}₽`,
+      delta: { workAmount: Number(updates.workAmount) - existing.workAmount },
+    });
+  }
+  if (updates.materialsAmount !== undefined) {
+    updatedFields.materialsAmount = Number(updates.materialsAmount);
+    logEntries.push({
+      action: "Расходы изменены",
+      timestamp: now(),
+      details: `${existing.materialsAmount}₽ → ${updatedFields.materialsAmount}₽`,
+      delta: { materialsAmount: Number(updates.materialsAmount) - existing.materialsAmount },
+    });
+  }
 
-  // Пересчитываем маржу с учётом новых значений
+  // Добавления к существующим значениям
+  if (updates.addSaleAmount) {
+    const added = Number(updates.addSaleAmount);
+    updatedFields.saleAmount = (existing.saleAmount || 0) + added;
+    logEntries.push({
+      action: `➕ Добавлено к продаже`,
+      timestamp: now(),
+      details: `+${added}₽ (было ${existing.saleAmount}₽, стало ${updatedFields.saleAmount}₽)`,
+      delta: { saleAmount: added },
+    });
+  }
+  if (updates.addPurchaseAmount) {
+    const added = Number(updates.addPurchaseAmount);
+    updatedFields.purchaseAmount = (existing.purchaseAmount || 0) + added;
+    logEntries.push({
+      action: `➕ Добавлено к закупке`,
+      timestamp: now(),
+      details: `+${added}₽ (было ${existing.purchaseAmount}₽, стало ${updatedFields.purchaseAmount}₽)`,
+      delta: { purchaseAmount: added },
+    });
+  }
+  if (updates.addWorkAmount) {
+    const added = Number(updates.addWorkAmount);
+    updatedFields.workAmount = (existing.workAmount || 0) + added;
+    logEntries.push({
+      action: `➕ Добавлено к монтажу`,
+      timestamp: now(),
+      details: `+${added}₽ (было ${existing.workAmount}₽, стало ${updatedFields.workAmount}₽)`,
+      delta: { workAmount: added },
+    });
+  }
+  if (updates.addMaterialsAmount) {
+    const added = Number(updates.addMaterialsAmount);
+    updatedFields.materialsAmount = (existing.materialsAmount || 0) + added;
+    logEntries.push({
+      action: `➕ Добавлено к расходам`,
+      timestamp: now(),
+      details: `+${added}₽ (было ${existing.materialsAmount}₽, стало ${updatedFields.materialsAmount}₽)`,
+      delta: { materialsAmount: added },
+    });
+  }
+
+  // Заметки
+  if (updates.notes !== undefined) {
+    updatedFields.notes = String(updates.notes);
+    logEntries.push({
+      action: "Заметки обновлены",
+      timestamp: now(),
+      details: String(updates.notes).slice(0, 100),
+    });
+  }
+
+  // Берём текущие значения (обновлённые или старые)
   const finalSale = typeof updatedFields.saleAmount === 'number' ? updatedFields.saleAmount : existing.saleAmount;
   const finalPurchase = typeof updatedFields.purchaseAmount === 'number' ? updatedFields.purchaseAmount : existing.purchaseAmount;
   const finalWork = typeof updatedFields.workAmount === 'number' ? updatedFields.workAmount : existing.workAmount;
@@ -133,10 +282,26 @@ export async function PATCH(request: Request) {
   updatedFields.workMargin = finalWork - finalMaterials;
   updatedFields.totalMargin = finalSale - finalPurchase + finalWork - finalMaterials;
 
+  // Добавляем запись о пересчёте маржи
+  const oldMargin = existing.totalMargin;
+  const newMargin = updatedFields.totalMargin as number;
+  if (oldMargin !== newMargin) {
+    logEntries.push({
+      action: "📊 Маржа пересчитана",
+      timestamp: now(),
+      details: `${oldMargin}₽ → ${newMargin}₽ (изменение: ${newMargin - oldMargin >= 0 ? "+" : ""}${newMargin - oldMargin}₽)`,
+    });
+  }
+
+  // Сохраняем обновлённый activityLog (добавляем новые записи к существующим)
+  const existingLog = parseActivityLog(existing.activityLog);
+  const mergedLog = [...existingLog, ...logEntries];
+  updatedFields.activityLog = JSON.stringify(mergedLog);
+
   const [row] = await db
     .update(deals)
     .set(updatedFields as any)
-    .where(eq(deals.id, parseInt(id)))
+    .where(eq(deals.id, existing.id))
     .returning();
 
   return NextResponse.json(row);

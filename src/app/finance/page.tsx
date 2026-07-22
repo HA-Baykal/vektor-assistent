@@ -4,8 +4,21 @@ import { useState, useEffect, useCallback } from "react";
 import VoiceInput from "@/components/VoiceInput";
 import { formatRub, formatDateRu, formatDateFull, parseAddition } from "@/lib/parser";
 
+type ActivityEntry = {
+  action: string;
+  timestamp: string;
+  details: string;
+  delta?: {
+    saleAmount?: number;
+    purchaseAmount?: number;
+    workAmount?: number;
+    materialsAmount?: number;
+  };
+};
+
 type Deal = {
   id: number;
+  dealNumber: number;
   date: string;
   category: string;
   saleAmount: number;
@@ -16,6 +29,7 @@ type Deal = {
   workMargin: number;
   totalMargin: number;
   notes: string | null;
+  activityLog: string;
   createdAt: string;
 };
 
@@ -91,9 +105,27 @@ export default function FinancePage() {
     try {
       // Шаг 1: Проверяем, не "добавка" ли это к существующей сделке
       const addition = parseAddition(text);
-      if (addition && deals.length > 0) {
-        // Берём последнюю сделку (первую в списке, т.к. сортировка по дате убыв.)
-        const lastDeal = deals[0];
+      if (addition) {
+        // Определяем, к какой сделке добавлять
+        let targetDeal: Deal | undefined;
+
+        if (addition.dealNumber) {
+          // Ищем по номеру сделки
+          targetDeal = deals.find(d => d.dealNumber === addition.dealNumber);
+          if (!targetDeal) {
+            showMessage(`❌ Сделка №${addition.dealNumber} не найдена. Проверьте номер.`, "error");
+            return;
+          }
+        } else if (deals.length > 0) {
+          // Берём последнюю сделку
+          targetDeal = deals[0];
+        }
+
+        if (!targetDeal) {
+          showMessage("❌ Нет сделок для добавления. Сначала создайте сделку.", "error");
+          return;
+        }
+
         const labels: string[] = [];
         if (addition.addMaterialsAmount > 0) labels.push(`${formatRub(addition.addMaterialsAmount)} на расходку`);
         if (addition.addPurchaseAmount > 0) labels.push(`${formatRub(addition.addPurchaseAmount)} на закупку`);
@@ -103,7 +135,7 @@ export default function FinancePage() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            id: lastDeal.id,
+            id: targetDeal.id,
             addMaterialsAmount: addition.addMaterialsAmount,
             addPurchaseAmount: addition.addPurchaseAmount,
             addWorkAmount: addition.addWorkAmount,
@@ -114,7 +146,7 @@ export default function FinancePage() {
         const updated = await res.json();
 
         showMessage(
-          `✅ Добавлено к сделке «${updated.category}»:\n${labels.join("\n")}\n💰 Новая маржа: ${formatRub(updated.totalMargin)}`
+          `✅ Сделка №${updated.dealNumber} «${updated.category}»:\n${labels.join("\n")}\n💰 Новая маржа: ${formatRub(updated.totalMargin)}`
         );
         fetchDeals();
         return;
@@ -281,7 +313,7 @@ export default function FinancePage() {
         </div>
         <VoiceInput
           onResult={handleVoiceResult}
-          placeholder='Например: "Продал кондиционер за 40 тысяч, купил за 30, монтаж 20, расходка 10"'
+          placeholder='Например: "Продал кондиционер..." или "Ещё расходка 2500 сделка 34"'
         />
         {message && (
           <div className={`mt-3 whitespace-pre-line rounded-xl p-3 text-xs leading-relaxed md:text-sm ${
@@ -490,6 +522,9 @@ export default function FinancePage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 md:gap-2">
                     <span className="text-sm md:text-lg">{CATEGORY_ICONS[deal.category] || "📦"}</span>
+                    <span className="rounded-lg bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-white md:text-xs">
+                      №{deal.dealNumber}
+                    </span>
                     <span className="rounded-lg bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 md:text-xs">
                       {deal.category}
                     </span>
@@ -567,7 +602,10 @@ export default function FinancePage() {
               <div className="flex items-center gap-2 md:gap-3">
                 <span className="text-xl md:text-2xl">{CATEGORY_ICONS[selectedDeal.category] || "📦"}</span>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 md:text-lg">{selectedDeal.category}</h2>
+                  <div className="flex items-center gap-1.5">
+                    <span className="rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold text-white md:text-xs">№{selectedDeal.dealNumber}</span>
+                    <h2 className="text-base font-bold text-slate-900 md:text-lg">{selectedDeal.category}</h2>
+                  </div>
                   <p className="text-[11px] text-slate-400 md:text-xs">
                     {formatDateFull(selectedDeal.date)}
                   </p>
@@ -773,7 +811,62 @@ export default function FinancePage() {
                       <p className="text-xs text-slate-700 md:text-sm">{selectedDeal.notes}</p>
                     </div>
                   )}
-                </div>
+
+                  {/* 📋 Лог действий */}
+                  {(() => {
+                    try {
+                      const log: ActivityEntry[] = JSON.parse(selectedDeal.activityLog || "[]");
+                      if (log.length === 0) return null;
+                      return (
+                        <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm md:p-4">
+                          <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400 md:text-xs">
+                            📋 История действий
+                          </p>
+                          <div className="space-y-2">
+                            {log.map((entry, idx) => (
+                              <div key={idx} className="flex gap-2">
+                                {/* Таймлайн */}
+                                <div className="flex flex-col items-center">
+                                  <div className={`h-2 w-2 rounded-full ${
+                                    entry.action.includes("Сделка создана") ? "bg-indigo-500" :
+                                    entry.action.includes("Маржа") ? "bg-emerald-500" :
+                                    entry.action.includes("➕") ? "bg-blue-500" :
+                                    "bg-slate-300"
+                                  }`} />
+                                  {idx < log.length - 1 && <div className="mt-0.5 h-full w-px bg-slate-200" />}
+                                </div>
+                                {/* Контент */}
+                                                <div className="flex-1 pb-2">
+                                                  <div className="flex items-center justify-between">
+                                                    <p className="text-[11px] font-semibold text-slate-700 md:text-xs">
+                                                      {entry.action}
+                                                    </p>
+                                                    <span className="text-[9px] text-slate-400 md:text-[10px]">{entry.timestamp?.slice(11, 16) || ""}</span>
+                                                  </div>
+                                                  <p className="mt-0.5 text-[10px] text-slate-500 md:text-[11px]">{entry.details}</p>
+                                                  {entry.delta && (entry.delta.materialsAmount || entry.delta.purchaseAmount || entry.delta.workAmount) && (
+                                                    <p className="text-[9px] font-medium text-blue-600 md:text-[10px]">
+                                                      Изменение расходов: {entry.delta.materialsAmount ? `+${formatRub(entry.delta.materialsAmount)} ` : ""}{entry.delta.purchaseAmount ? `+${formatRub(entry.delta.purchaseAmount)} ` : ""}{entry.delta.workAmount ? `+${formatRub(entry.delta.workAmount)}` : ""}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                          {/* Итог в логе */}
+                                          {log.length > 1 && (
+                                            <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                                              <span className="text-[10px] font-semibold text-slate-500">Всего операций:</span>
+                                              <span className="text-[10px] font-bold text-slate-700">{log.length}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    } catch {
+                                      return null;
+                                    }
+                                  })()}
+                                </div>
 
                 {/* Действия */}
                 <div className="mt-4 flex flex-wrap gap-2 md:mt-5 md:gap-3">
