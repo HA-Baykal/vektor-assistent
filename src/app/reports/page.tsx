@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { formatRub, formatDateRu } from "@/lib/parser";
+import { formatRub, formatDateRu, formatDateFull } from "@/lib/parser";
 
 type Deal = {
   id: number;
@@ -11,7 +11,10 @@ type Deal = {
   purchaseAmount: number;
   workAmount: number;
   materialsAmount: number;
+  equipmentMargin: number;
+  workMargin: number;
   totalMargin: number;
+  notes: string | null;
 };
 
 type ReportData = {
@@ -33,12 +36,20 @@ type ReportData = {
 };
 
 const PERIODS = [
-  { value: "today", label: "Сегодня" },
-  { value: "yesterday", label: "Вчера" },
-  { value: "week", label: "Неделя" },
-  { value: "month", label: "Месяц" },
-  { value: "lastmonth", label: "Прошлый месяц" },
+  { value: "today", label: "Сегодня", icon: "📅" },
+  { value: "yesterday", label: "Вчера", icon: "⬅️" },
+  { value: "week", label: "Неделя", icon: "📊" },
+  { value: "month", label: "Месяц", icon: "📈" },
+  { value: "lastmonth", label: "Прошлый месяц", icon: "🗃️" },
 ];
+
+const CATEGORY_ICONS: Record<string, string> = {
+  "Кондиционер": "❄️",
+  "Окна": "🪟",
+  "Вентиляция": "💨",
+  "Бурение": "🛠️",
+  "Объект": "🏗️",
+};
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState("week");
@@ -59,35 +70,74 @@ export default function ReportsPage() {
 
   const exportCSV = () => {
     if (!data) return;
-    const rows = [
-      ["Дата", "Категория", "Продажа", "Закупка", "Монтаж", "Материалы", "Маржа"],
-      ...data.deals.map((d) => [
-        d.date,
-        d.category,
-        d.saleAmount,
-        d.purchaseAmount,
-        d.workAmount,
-        d.materialsAmount,
-        d.totalMargin,
-      ]),
+
+    // Строка с периодом
+    const headerInfo = [`Отчёт: ${formatDateRu(data.from)} — ${formatDateRu(data.to)}`];
+    
+    // Строка с итогами
+    const summaryLine = [
+      `Чистая маржа,${data.summary.totalMargin}`,
+      `Выручка,${data.summary.revenue}`,
+      `Маржа оборудования,${data.summary.equipmentMargin}`,
+      `Маржа работы,${data.summary.workMargin}`,
+      `Всего сделок,${data.summary.count}`,
     ];
-    const csv = rows
-      .map((r) => r.map((c) => `"${c}"`).join(","))
-      .join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+
+    // Заголовки таблицы
+    const headers = [
+      "Дата", "Категория",
+      "Продажа (₽)", "Закупка (₽)", "Монтаж (₽)", "Материалы (₽)",
+      "Маржа обор. (₽)", "Маржа работы (₽)", "Чистая маржа (₽)",
+      "Заметки"
+    ];
+
+    // Данные сделок
+    const rows = data.deals.map((d) => [
+      d.date,
+      d.category,
+      d.saleAmount,
+      d.purchaseAmount,
+      d.workAmount,
+      d.materialsAmount,
+      d.equipmentMargin,
+      d.workMargin,
+      d.totalMargin,
+      d.notes || "",
+    ]);
+
+    // Собираем CSV
+    const csvContent = [
+      headerInfo.join(","),
+      "",
+      ...summaryLine,
+      "",
+      headers.map((h) => `"${h}"`).join(","),
+      ...rows.map((r) => r.map((c) => `"${c}"`).join(",")),
+    ].join("\n");
+
+    // Добавляем BOM для корректного отображения русских букв в Excel
+    const blob = new Blob(["\uFEFF" + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `otchyot-${period}.csv`;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.download = `vektor-otchyot-${period}-${dateStr}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
   if (loading || !data) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-slate-900">Отчёты</h1>
-        <p className="py-8 text-center text-sm text-slate-400">Загрузка...</p>
+      <div className="mx-auto max-w-5xl space-y-6">
+        <h1 className="text-2xl font-bold text-slate-900">📊 Отчёты</h1>
+        <div className="flex items-center justify-center py-16">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600" />
+        </div>
       </div>
     );
   }
@@ -99,19 +149,25 @@ export default function ReportsPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Отчёты</h1>
+          <h1 className="text-2xl font-bold text-slate-900">📊 Отчёты</h1>
           <p className="text-sm text-slate-500">
             {formatDateRu(data.from)} — {formatDateRu(data.to)}
           </p>
         </div>
         <button
           onClick={exportCSV}
-          className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:shadow-md active:scale-95"
         >
-          📥 Экспорт CSV
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Экспорт в Excel
         </button>
       </div>
 
@@ -121,138 +177,168 @@ export default function ReportsPage() {
           <button
             key={p.value}
             onClick={() => setPeriod(p.value)}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${
               period === p.value
-                ? "bg-indigo-600 text-white shadow-md"
-                : "bg-white text-slate-600 hover:bg-slate-50"
+                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+                : "bg-white text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-800"
             }`}
           >
-            {p.label}
+            {p.icon} {p.label}
           </button>
         ))}
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-4 text-white shadow-md">
-          <p className="text-xs opacity-80">Чистая маржа</p>
-          <p className="mt-1 text-xl font-bold">{formatRub(s.totalMargin)}</p>
-        </div>
-        <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-4 text-white shadow-md">
-          <p className="text-xs opacity-80">Выручка</p>
-          <p className="mt-1 text-xl font-bold">{formatRub(s.revenue)}</p>
-        </div>
-        <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 p-4 text-white shadow-md">
-          <p className="text-xs opacity-80">Маржа оборудования</p>
-          <p className="mt-1 text-xl font-bold">
-            {formatRub(s.equipmentMargin)}
-          </p>
-        </div>
-        <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 p-4 text-white shadow-md">
-          <p className="text-xs opacity-80">Маржа работы</p>
-          <p className="mt-1 text-xl font-bold">{formatRub(s.workMargin)}</p>
-        </div>
-      </div>
-
-      {/* Detailed breakdown */}
-      <div className="rounded-2xl bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-900">
-          📊 Детализация
-        </h3>
-        <div className="space-y-3">
-          <BreakdownRow label="Продажа оборудования" value={s.revenue} positive />
-          <BreakdownRow label="Закупка оборудования" value={s.purchase} />
-          <BreakdownRow
-            label="Маржа оборудования"
-            value={s.equipmentMargin}
-            positive
-            bold
-          />
-          <div className="border-t border-slate-100" />
-          <BreakdownRow label="Оплата работы (монтаж)" value={s.work} positive />
-          <BreakdownRow label="Комплектация монтажа" value={s.materials} />
-          <BreakdownRow
-            label="Маржа работы"
-            value={s.workMargin}
-            positive
-            bold
-          />
-        </div>
-        <div className="mt-4 flex items-center justify-between rounded-xl bg-emerald-50 p-4">
-          <span className="text-sm font-bold text-emerald-800">
-            ЧИСТАЯ МАРЖА
-          </span>
-          <span className="text-lg font-bold text-emerald-600">
-            {formatRub(s.totalMargin)}
-          </span>
-        </div>
-      </div>
-
-      {/* By category */}
-      <div className="rounded-2xl bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-900">
-          📈 По категориям
-        </h3>
-        <div className="space-y-3">
-          {Object.entries(data.byCategory).map(([cat, info]) => (
-            <div key={cat}>
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-700">{cat}</span>
-                <span className="text-slate-500">
-                  {info.count} сделок · {formatRub(info.margin)}
-                </span>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500"
-                  style={{
-                    width: `${(info.margin / maxMargin) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-          {Object.keys(data.byCategory).length === 0 && (
-            <p className="py-4 text-center text-sm text-slate-400">
-              Нет данных за период
+        <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-5 text-white shadow-lg">
+          <p className="text-xs font-medium opacity-80">Чистая маржа</p>
+          <p className="mt-1.5 text-2xl font-black">{formatRub(s.totalMargin)}</p>
+          {s.count > 0 && (
+            <p className="mt-1 text-[10px] opacity-60">
+              Средняя маржа: {formatRub(Math.round(s.totalMargin / s.count))} / сделка
             </p>
           )}
+        </div>
+        <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-5 text-white shadow-lg">
+          <p className="text-xs font-medium opacity-80">Выручка</p>
+          <p className="mt-1.5 text-2xl font-black">{formatRub(s.revenue)}</p>
+          <p className="mt-1 text-[10px] opacity-60">{s.count} сделок</p>
+        </div>
+        <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 p-5 text-white shadow-lg">
+          <p className="text-xs font-medium opacity-80">Маржа оборудования</p>
+          <p className="mt-1.5 text-2xl font-black">{formatRub(s.equipmentMargin)}</p>
+          <p className="mt-1 text-[10px] opacity-60">
+            Продажа: {formatRub(s.revenue)} - Закупка: {formatRub(s.purchase)}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 p-5 text-white shadow-lg">
+          <p className="text-xs font-medium opacity-80">Маржа работы</p>
+          <p className="mt-1.5 text-2xl font-black">{formatRub(s.workMargin)}</p>
+          <p className="mt-1 text-[10px] opacity-60">
+            Работа: {formatRub(s.work)} - Материалы: {formatRub(s.materials)}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Detailed breakdown */}
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <h3 className="mb-4 text-sm font-semibold text-slate-900">
+            📊 Детализация
+          </h3>
+          <div className="space-y-3">
+            <BreakdownRow label="Продажа оборудования" value={s.revenue} positive />
+            <BreakdownRow label="Закупка оборудования" value={s.purchase} />
+            <BreakdownRow
+              label="Маржа оборудования"
+              value={s.equipmentMargin}
+              positive
+              bold
+            />
+            <div className="border-t border-slate-100" />
+            <BreakdownRow label="Оплата работы (монтаж)" value={s.work} positive />
+            <BreakdownRow label="Комплектация монтажа" value={s.materials} />
+            <BreakdownRow
+              label="Маржа работы"
+              value={s.workMargin}
+              positive
+              bold
+            />
+          </div>
+          <div className="mt-4 flex items-center justify-between rounded-xl bg-emerald-50 p-4">
+            <span className="text-sm font-bold text-emerald-800">
+              ЧИСТАЯ МАРЖА
+            </span>
+            <span className="text-lg font-black text-emerald-600">
+              {formatRub(s.totalMargin)}
+            </span>
+          </div>
+        </div>
+
+        {/* By category */}
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <h3 className="mb-4 text-sm font-semibold text-slate-900">
+            📈 По категориям
+          </h3>
+          <div className="space-y-4">
+            {Object.entries(data.byCategory).map(([cat, info]) => (
+              <div key={cat}>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                    {CATEGORY_ICONS[cat] || "📦"} {cat}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {info.count} сделок · {formatRub(info.margin)}
+                  </span>
+                </div>
+                <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
+                    style={{
+                      width: `${Math.max((info.margin / maxMargin) * 100, 2)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+            {Object.keys(data.byCategory).length === 0 && (
+              <div className="py-8 text-center">
+                <p className="text-3xl">📭</p>
+                <p className="mt-2 text-sm text-slate-400">Нет данных за период</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Deals list */}
-      <div className="rounded-2xl bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-900">
-          📋 Сделки за период ({data.deals.length})
-        </h3>
+      <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-900">
+            📋 Сделки за период
+          </h3>
+          <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
+            {data.deals.length} шт.
+          </span>
+        </div>
         <div className="space-y-2">
-          {data.deals.map((d) => (
-            <div
-              key={d.id}
-              className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3"
-            >
-              <div>
-                <span className="rounded-lg bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
-                  {d.category}
-                </span>
-                <span className="ml-2 text-xs text-slate-400">
-                  {formatDateRu(d.date)}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-sm font-bold text-emerald-600">
-                  {formatRub(d.totalMargin)}
-                </span>
-                <span className="ml-2 text-xs text-slate-400">
-                  из {formatRub(d.saleAmount)}
-                </span>
-              </div>
+          {data.deals.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-3xl">📭</p>
+              <p className="mt-2 text-sm text-slate-400">Сделок за период нет</p>
             </div>
-          ))}
-          {data.deals.length === 0 && (
-            <p className="py-4 text-center text-sm text-slate-400">
-              Сделок за период нет
-            </p>
+          ) : (
+            data.deals.map((d) => (
+              <div
+                key={d.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:bg-slate-100"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{CATEGORY_ICONS[d.category] || "📦"}</span>
+                  <span className="rounded-lg bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-600">
+                    {d.category}
+                  </span>
+                  <span className="text-xs text-slate-400">{formatDateRu(d.date)}</span>
+                  {d.notes && (
+                    <span className="hidden max-w-[200px] truncate text-xs text-slate-400 md:inline">
+                      · {d.notes}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <span className={`text-sm font-bold ${
+                      d.totalMargin >= 0 ? "text-emerald-600" : "text-red-600"
+                    }`}>
+                      {formatRub(d.totalMargin)}
+                    </span>
+                    <span className="ml-1.5 text-xs text-slate-400">
+                      из {formatRub(d.saleAmount)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
@@ -271,18 +357,19 @@ function BreakdownRow({
   positive?: boolean;
   bold?: boolean;
 }) {
+  // Если positive=true и значение должно отображаться со знаком +
+  const isPositive = positive;
+  const colorClass = value >= 0 && isPositive ? "text-emerald-600" : "text-red-500";
+  
   return (
     <div className="flex items-center justify-between text-sm">
       <span className={bold ? "font-semibold text-slate-800" : "text-slate-500"}>
         {label}
       </span>
       <span
-        className={`${bold ? "font-bold" : "font-medium"} ${
-          positive ? "text-emerald-600" : "text-red-500"
-        }`}
+        className={`${bold ? "font-bold" : "font-medium"} ${colorClass}`}
       >
-        {positive ? "+" : "-"}
-        {formatRub(value)}
+        {value >= 0 && isPositive ? "+" : ""}{formatRub(value)}
       </span>
     </div>
   );

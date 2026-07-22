@@ -51,11 +51,11 @@ export function extractDate(text: string, baseDate: Date = new Date()): string {
   today.setHours(0, 0, 0, 0);
 
   // Относительные даты
-  if (/(?:^|\s|,)завтра(?:\s|,|$)/.test(lower)) return formatDate(addDays(today, 1));
-  if (/(?:^|\s|,)послезавтра(?:\s|,|$)/.test(lower)) return formatDate(addDays(today, 2));
-  if (/(?:^|\s|,)вчера(?:\s|,|$)/.test(lower)) return formatDate(addDays(today, -1));
-  if (/(?:^|\s|,)позавчера(?:\s|,|$)/.test(lower)) return formatDate(addDays(today, -2));
-  if (/(?:^|\s|,)сегодня(?:\s|,|$)/.test(lower)) return formatDate(today);
+  if (/(?:^|\s|,)завтра(?:,|\s|$)/.test(lower)) return formatDate(addDays(today, 1));
+  if (/(?:^|\s|,)послезавтра(?:,|\s|$)/.test(lower)) return formatDate(addDays(today, 2));
+  if (/(?:^|\s|,)вчера(?:,|\s|$)/.test(lower)) return formatDate(addDays(today, -1));
+  if (/(?:^|\s|,)позавчера(?:,|\s|$)/.test(lower)) return formatDate(addDays(today, -2));
+  if (/(?:^|\s|,)сегодня(?:,|\s|$)/.test(lower)) return formatDate(today);
 
   // День недели
   const weekdays: Record<string, number> = {
@@ -116,7 +116,7 @@ export function extractTime(text: string): string | null {
   const lower = text.toLowerCase();
 
   // "в 9:30 утра" / "в 9:30"
-  const fullTimeRegex = /в\s+(\d{1,2})[:\.\s](\d{2})\s*(утра|вечера)?/i;
+  const fullTimeRegex = /в\s+(\d{1,2})[:\s\.](\d{2})\s*(утра|вечера)?/i;
   const ftMatch = lower.match(fullTimeRegex);
   if (ftMatch) {
     let h = parseInt(ftMatch[1]);
@@ -128,7 +128,7 @@ export function extractTime(text: string): string | null {
   }
 
   // "16:00" / "16.00"
-  const colonMatch = text.match(/(\d{1,2})[:\.](\d{2})/);
+  const colonMatch = text.match(/(\d{1,2})[:\\.](\d{2})/);
   if (colonMatch) {
     const h = parseInt(colonMatch[1]);
     const m = parseInt(colonMatch[2]);
@@ -158,11 +158,18 @@ export function extractAmount(text: string): number {
   const lower = text.toLowerCase();
 
   // "30 тысяч" / "30 тыс" / "30 т"
-  const thousandRegex = /(\d+(?:[.,]\d+)?)\s*(тысяч|тыс|т\b|к)/i;
+  const thousandRegex = /(\d+(?:[.,]\d+)?)\s*(тысяч|тыс|т\b)/i;
   const tMatch = lower.match(thousandRegex);
   if (tMatch) {
     const num = parseFloat(tMatch[1].replace(",", "."));
     return Math.round(num * 1000);
+  }
+
+  // "30 к" — "к" может быть в конце "30к"
+  const kRegex = /(\d+)\s*к\b/i;
+  const kMatch = lower.match(kRegex);
+  if (kMatch) {
+    return parseInt(kMatch[1]) * 1000;
   }
 
   // "17700" — просто число
@@ -191,7 +198,7 @@ export function parseInput(input: string): ParseResult {
   const lower = text.toLowerCase();
 
   // Проверяем, финансовый ли это ввод
-  const hasFinancialKeywords = /продал|купил|закуп|монтаж|продаж|марж|прибыл|объект|работа|материал|комплектац/.test(lower);
+  const hasFinancialKeywords = /продал|купил|закуп|монтаж|продаж|марж|прибыл|объект|работа|материал|комплектац|расход/.test(lower);
 
   if (hasFinancialKeywords) {
     const deals = parseDeals(text);
@@ -231,10 +238,10 @@ function parseTasks(text: string): ParsedTask[] {
     // Очищаем текст от временных и датевых маркеров
     let cleanText = part
       .replace(/завтра|сегодня|послезавтра|вчера|позавчера/gi, "")
-      .replace(/(?:^|\s)в\s+\d{1,2}[:\.]?\d{0,2}\s*(утра|вечера|дня|часов|часа|час)?/gi, " ")
+      .replace(/(?:^|\s)в\s+\d{1,2}[:\\.]?\d{0,2}\s*(утра|вечера|дня|часов|часа|час)?/gi, " ")
       .replace(/(?:^|\s)к\s+\d{1,2}/gi, " ")
       .replace(/(?:^|\s)на\s+\d{1,2}/gi, " ")
-      .replace(/\d{1,2}[:\.]\d{2}/g, "")
+      .replace(/\d{1,2}[:\\.]\d{2}/g, "")
       .replace(/\d{1,2}\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-я]*/gi, "")
       .replace(/\d{1,2}[.\-\/]\d{1,2}(?:[.\-\/]\d{2,4})?/g, "")
       .replace(/[|;]/g, "")
@@ -258,29 +265,70 @@ function parseTasks(text: string): ParsedTask[] {
   return tasks;
 }
 
-// Парсит финансовые сделки (поддерживает несколько объектов в одном сообщении)
+// ============================================================
+// ИСПРАВЛЕННАЯ функция извлечения суммы по ключевому слову
+// ============================================================
+
+// Извлекает сумму из текста, ища число рядом с ключевым словом
+function extractDealAmount(text: string, keywordRegex: RegExp): number {
+  const lower = text.toLowerCase();
+
+  // Клонируем regex, чтобы сбросить lastIndex
+  const regex = new RegExp(keywordRegex.source, keywordRegex.flags + "g");
+  
+  let totalAmount = 0;
+  let match;
+
+  while ((match = regex.exec(lower)) !== null) {
+    const keywordIndex = match.index;
+    const keywordEnd = keywordIndex + match[0].length;
+    
+    // Смотрим текст после ключевого слова (до 100 символов)
+    const afterKeyword = text.slice(keywordEnd, keywordEnd + 100);
+    // И немного перед ключевым словом (на случай "за 40 продал")
+    const beforeKeyword = text.slice(Math.max(0, keywordIndex - 40), keywordIndex);
+
+    // Пробуем извлечь сумму из текста после ключевого слова
+    const amountAfter = extractAmount(afterKeyword);
+    if (amountAfter > 0) {
+      totalAmount += amountAfter;
+      // Пропускаем текст, чтобы не найти то же число повторно
+      regex.lastIndex = keywordEnd + afterKeyword.length;
+      continue;
+    }
+
+    // Если после не нашли, пробуем перед
+    const amountBefore = extractAmount(beforeKeyword);
+    if (amountBefore > 0) {
+      totalAmount += amountBefore;
+    }
+  }
+
+  return totalAmount;
+}
+
+// ============================================================
+// Парсит финансовые сделки
+// ============================================================
 function parseDeals(text: string): ParsedDeal[] {
   const deals: ParsedDeal[] = [];
   const baseDate = new Date();
   const date = extractDate(text, baseDate);
   const category = detectCategory(text);
 
-  // Разбиваем на отдельные сделки по "первый", "второй", etc. или по ". "
+  // Разбиваем на отдельные сделки по "первый", "второй", etc.
   const dealMarkers = /(?:^|\s|[.]\s*)(первый|второй|третий|четвёртый|пятая|шестой|седьмой|восьмой)/gi;
 
   let dealTexts: string[] = [];
 
   if (dealMarkers.test(text)) {
-    // Несколько сделок — разбиваем по маркерам
     dealMarkers.lastIndex = 0;
     const parts = text.split(dealMarkers);
-    // parts[0] — вводный текст, parts[1], parts[3], ... — маркеры, parts[2], parts[4], ... — тексты
     for (let i = 2; i < parts.length; i += 2) {
       if (parts[i] && parts[i].trim().length > 3) {
         dealTexts.push(parts[i].trim());
       }
     }
-    // Если не удалось разбить, берём весь текст
     if (dealTexts.length === 0) {
       dealTexts = [text];
     }
@@ -289,12 +337,12 @@ function parseDeals(text: string): ParsedDeal[] {
   }
 
   for (const dealText of dealTexts) {
-    const saleAmount = extractDealAmount(dealText, /прода[жл]|продаж/);
-    const purchaseAmount = extractDealAmount(dealText, /купил|закуп/);
-    const workAmount = extractDealAmount(dealText, /монтаж|работа|установк|оплат/);
+    const saleAmount = extractDealAmount(dealText, /прода[жл]|продаж|прода/);
+    const purchaseAmount = extractDealAmount(dealText, /купил|закуп|закупил|купи/);
+    const workAmount = extractDealAmount(dealText, /монтаж|работа|установк|оплат|монта/);
     const materialsAmount = extractDealAmount(
       dealText,
-      /материал|комплектац|фреон|кронштейн|расходн/
+      /материал|комплектац|фреон|кронштейн|расход|расходк|расходн/
     );
 
     if (saleAmount > 0 || purchaseAmount > 0 || workAmount > 0 || materialsAmount > 0) {
@@ -311,27 +359,6 @@ function parseDeals(text: string): ParsedDeal[] {
   }
 
   return deals;
-}
-
-// Извлекает сумму из текста по ключевому слову
-function extractDealAmount(text: string, keywordRegex: RegExp): number {
-  const segments = text.split(/[,;.]/).map((s) => s.trim());
-
-  for (const seg of segments) {
-    if (!keywordRegex.test(seg.toLowerCase())) continue;
-
-    const amount = extractAmount(seg);
-    if (amount > 0) {
-      // Эвристика: если число < 100 и это продажа/закупка — это тысячи
-      const rawNum = seg.match(/\d+/);
-      if (rawNum && parseInt(rawNum[0]) < 100 && /прода[жл]|продаж|купил|закуп/.test(seg.toLowerCase())) {
-        return parseInt(rawNum[0]) * 1000;
-      }
-      return amount;
-    }
-  }
-
-  return 0;
 }
 
 // Форматирует сумму в рублях
@@ -356,4 +383,15 @@ export function formatWeekdayRu(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
   const days = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
   return days[d.getDay()];
+}
+
+// Форматирует дату полностью: "22 июля 2025, вторник"
+export function formatDateFull(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  const months = [
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+  ];
+  const days = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${days[d.getDay()]}`;
 }
