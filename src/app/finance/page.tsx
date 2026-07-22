@@ -38,6 +38,27 @@ export default function FinancePage() {
   const [filter, setFilter] = useState("all");
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState({
+    saleAmount: "",
+    purchaseAmount: "",
+    workAmount: "",
+    materialsAmount: "",
+    notes: "",
+  });
+
+  // Когда открываем сделку, сбрасываем editMode и заполняем форму
+  const openDeal = (deal: Deal) => {
+    setSelectedDeal(deal);
+    setEditMode(false);
+    setEditForm({
+      saleAmount: String(deal.saleAmount),
+      purchaseAmount: String(deal.purchaseAmount),
+      workAmount: String(deal.workAmount),
+      materialsAmount: String(deal.materialsAmount),
+      notes: deal.notes || "",
+    });
+  };
 
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -115,6 +136,65 @@ export default function FinancePage() {
     setShowForm(false);
     showMessage("✅ Сделка создана");
     fetchDeals();
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedDeal) return;
+    try {
+      const body: Record<string, any> = {
+        id: selectedDeal.id,
+        saleAmount: parseInt(editForm.saleAmount) || 0,
+        purchaseAmount: parseInt(editForm.purchaseAmount) || 0,
+        workAmount: parseInt(editForm.workAmount) || 0,
+        materialsAmount: parseInt(editForm.materialsAmount) || 0,
+        notes: editForm.notes || null,
+      };
+
+      const res = await fetch("/api/deals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) throw new Error("Ошибка");
+
+      const updated = await res.json();
+      setSelectedDeal(updated);
+      setEditMode(false);
+      showMessage("✅ Сделка обновлена, маржа пересчитана");
+      fetchDeals();
+    } catch {
+      showMessage("❌ Ошибка при сохранении", "error");
+    }
+  };
+
+  const handleAddExpense = async (field: "addMaterialsAmount" | "addPurchaseAmount" | "addWorkAmount") => {
+    if (!selectedDeal) return;
+    const label = field === "addMaterialsAmount" ? "расходные материалы" : field === "addPurchaseAmount" ? "закупку" : "монтаж";
+    const extra = prompt(`Сколько ещё потратили на ${label}? (₽)`);
+    if (!extra) return;
+    const amount = parseInt(extra);
+    if (!amount || amount <= 0) {
+      showMessage("❌ Введите корректную сумму", "error");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/deals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedDeal.id, [field]: amount }),
+      });
+
+      if (!res.ok) throw new Error("Ошибка");
+
+      const updated = await res.json();
+      setSelectedDeal(updated);
+      showMessage(`✅ Добавлено ${formatRub(amount)} к ${label}. Маржа пересчитана`);
+      fetchDeals();
+    } catch {
+      showMessage("❌ Ошибка при обновлении", "error");
+    }
   };
 
   const confirmDelete = async () => {
@@ -372,7 +452,7 @@ export default function FinancePage() {
             <div
               key={deal.id}
               className="group animate-fade-in-up cursor-pointer rounded-2xl border border-slate-100 bg-white p-3.5 shadow-sm transition-all active:scale-[0.99] hover:border-indigo-100 hover:shadow-md md:p-4"
-              onClick={() => setSelectedDeal(deal)}
+              onClick={() => openDeal(deal)}
             >
               <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">
@@ -442,7 +522,7 @@ export default function FinancePage() {
       {selectedDeal && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm md:items-center"
-          onClick={() => setSelectedDeal(null)}
+          onClick={() => { setSelectedDeal(null); setEditMode(false); }}
         >
           <div
             className="w-full max-w-lg animate-slide-up rounded-2xl rounded-b-none bg-white p-5 shadow-2xl md:rounded-b-2xl md:p-6"
@@ -462,100 +542,242 @@ export default function FinancePage() {
                 </div>
               </div>
               <button
-                onClick={() => setSelectedDeal(null)}
+                onClick={() => { setSelectedDeal(null); setEditMode(false); }}
                 className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400 transition hover:bg-slate-200 hover:text-slate-600 md:h-8 md:w-8"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-2.5 md:space-y-3">
-              {/* Доходы */}
-              <div className="rounded-xl bg-emerald-50 p-3 md:p-4">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 md:text-xs">Доходы</p>
-                <div className="space-y-1.5 md:space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 md:text-sm">Продажа оборудования</span>
-                    <span className="text-xs font-bold text-emerald-600 md:text-sm">+{formatRub(selectedDeal.saleAmount)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 md:text-sm">Монтаж и работы</span>
-                    <span className="text-xs font-bold text-emerald-600 md:text-sm">+{formatRub(selectedDeal.workAmount)}</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-emerald-200 pt-1.5 md:pt-2">
-                    <span className="text-xs font-semibold text-slate-700 md:text-sm">Итого доход</span>
-                    <span className="text-xs font-bold text-emerald-700 md:text-sm">
-                      +{formatRub(selectedDeal.saleAmount + selectedDeal.workAmount)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Расходы */}
-              <div className="rounded-xl bg-red-50 p-3 md:p-4">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-red-600 md:text-xs">Расходы</p>
-                <div className="space-y-1.5 md:space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 md:text-sm">Закупка оборудования</span>
-                    <span className="text-xs font-bold text-red-500 md:text-sm">-{formatRub(selectedDeal.purchaseAmount)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 md:text-sm">Материалы и комплектация</span>
-                    <span className="text-xs font-bold text-red-500 md:text-sm">-{formatRub(selectedDeal.materialsAmount)}</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-red-200 pt-1.5 md:pt-2">
-                    <span className="text-xs font-semibold text-slate-700 md:text-sm">Итого расход</span>
-                    <span className="text-xs font-bold text-red-600 md:text-sm">
-                      -{formatRub(selectedDeal.purchaseAmount + selectedDeal.materialsAmount)}
-                    </span>
+            {editMode ? (
+              /* ===== РЕЖИМ РЕДАКТИРОВАНИЯ ===== */
+              <div className="space-y-3 md:space-y-4">
+                <div className="rounded-xl bg-emerald-50 p-3 md:p-4">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 md:text-xs">Доходы</p>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-slate-500">Продажа оборудования (₽)</label>
+                      <input
+                        type="number"
+                        value={editForm.saleAmount}
+                        onChange={(e) => setEditForm({ ...editForm, saleAmount: e.target.value })}
+                        className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-slate-500">Монтаж и работы (₽)</label>
+                      <input
+                        type="number"
+                        value={editForm.workAmount}
+                        onChange={(e) => setEditForm({ ...editForm, workAmount: e.target.value })}
+                        className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Итоговая маржа */}
-              <div className={`rounded-xl p-3 md:p-4 ${
-                selectedDeal.totalMargin >= 0 ? "bg-slate-900 text-white" : "bg-red-600 text-white"
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide opacity-80 md:text-xs">Чистая маржа</p>
-                    <p className="mt-0.5 text-[10px] opacity-70 md:text-xs">
-                      Оборудование: {formatRub(selectedDeal.equipmentMargin)} · Работа: {formatRub(selectedDeal.workMargin)}
+                <div className="rounded-xl bg-red-50 p-3 md:p-4">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-red-600 md:text-xs">Расходы</p>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-slate-500">Закупка оборудования (₽)</label>
+                      <input
+                        type="number"
+                        value={editForm.purchaseAmount}
+                        onChange={(e) => setEditForm({ ...editForm, purchaseAmount: e.target.value })}
+                        className="w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-slate-500">Материалы и расходка (₽)</label>
+                      <input
+                        type="number"
+                        value={editForm.materialsAmount}
+                        onChange={(e) => setEditForm({ ...editForm, materialsAmount: e.target.value })}
+                        className="w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-500">Заметки</label>
+                  <input
+                    type="text"
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+
+                {/* Предпросмотр маржи */}
+                {(() => {
+                  const s = parseInt(editForm.saleAmount) || 0;
+                  const p = parseInt(editForm.purchaseAmount) || 0;
+                  const w = parseInt(editForm.workAmount) || 0;
+                  const m = parseInt(editForm.materialsAmount) || 0;
+                  const margin = s - p + w - m;
+                  return (
+                    <div className={`rounded-xl p-3 ${
+                      margin >= 0 ? "bg-slate-900 text-white" : "bg-red-600 text-white"
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold opacity-80">Предварительная маржа:</span>
+                        <span className="text-lg font-black">{margin >= 0 ? "+" : ""}{formatRub(margin)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="flex gap-2 md:gap-3">
+                  <button
+                    onClick={handleSaveEdit}
+                    className="flex-1 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-white shadow-md shadow-emerald-200 transition active:scale-95 hover:bg-emerald-600"
+                  >
+                    💾 Сохранить
+                  </button>
+                  <button
+                    onClick={() => setEditMode(false)}
+                    className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-600 transition active:scale-95 hover:bg-slate-200"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ===== РЕЖИМ ПРОСМОТРА ===== */
+              <>
+                <div className="space-y-2.5 md:space-y-3">
+                  {/* Доходы */}
+                  <div className="rounded-xl bg-emerald-50 p-3 md:p-4">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 md:text-xs">Доходы</p>
+                    <div className="space-y-1.5 md:space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 md:text-sm">Продажа оборудования</span>
+                        <span className="text-xs font-bold text-emerald-600 md:text-sm">+{formatRub(selectedDeal.saleAmount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 md:text-sm">Монтаж и работы</span>
+                        <span className="text-xs font-bold text-emerald-600 md:text-sm">+{formatRub(selectedDeal.workAmount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-emerald-200 pt-1.5 md:pt-2">
+                        <span className="text-xs font-semibold text-slate-700 md:text-sm">Итого доход</span>
+                        <span className="text-xs font-bold text-emerald-700 md:text-sm">
+                          +{formatRub(selectedDeal.saleAmount + selectedDeal.workAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Расходы */}
+                  <div className="rounded-xl bg-red-50 p-3 md:p-4">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-red-600 md:text-xs">Расходы</p>
+                    <div className="space-y-1.5 md:space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 md:text-sm">Закупка оборудования</span>
+                        <span className="text-xs font-bold text-red-500 md:text-sm">-{formatRub(selectedDeal.purchaseAmount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 md:text-sm">Материалы и комплектация</span>
+                        <span className="text-xs font-bold text-red-500 md:text-sm">-{formatRub(selectedDeal.materialsAmount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-red-200 pt-1.5 md:pt-2">
+                        <span className="text-xs font-semibold text-slate-700 md:text-sm">Итого расход</span>
+                        <span className="text-xs font-bold text-red-600 md:text-sm">
+                          -{formatRub(selectedDeal.purchaseAmount + selectedDeal.materialsAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Кнопки быстрого добавления расходов */}
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 md:p-4">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:text-xs">
+                      ➕ Добавить расход
                     </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => handleAddExpense("addMaterialsAmount")}
+                        className="rounded-lg bg-amber-100 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition active:scale-95 hover:bg-amber-200"
+                      >
+                        + Расходные материалы
+                      </button>
+                      <button
+                        onClick={() => handleAddExpense("addPurchaseAmount")}
+                        className="rounded-lg bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 transition active:scale-95 hover:bg-red-200"
+                      >
+                        + Закупка
+                      </button>
+                      <button
+                        onClick={() => handleAddExpense("addWorkAmount")}
+                        className="rounded-lg bg-blue-100 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition active:scale-95 hover:bg-blue-200"
+                      >
+                        + Монтаж
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-lg font-black md:text-2xl">
-                    {selectedDeal.totalMargin >= 0 ? "+" : ""}{formatRub(selectedDeal.totalMargin)}
-                  </p>
-                </div>
-              </div>
 
-              {/* Заметки */}
-              {selectedDeal.notes && (
-                <div className="rounded-xl bg-slate-50 p-3 md:p-4">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:text-xs">Заметки</p>
-                  <p className="text-xs text-slate-700 md:text-sm">{selectedDeal.notes}</p>
-                </div>
-              )}
-            </div>
+                  {/* Итоговая маржа */}
+                  <div className={`rounded-xl p-3 md:p-4 ${
+                    selectedDeal.totalMargin >= 0 ? "bg-slate-900 text-white" : "bg-red-600 text-white"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide opacity-80 md:text-xs">Чистая маржа</p>
+                        <p className="mt-0.5 text-[10px] opacity-70 md:text-xs">
+                          Оборудование: {formatRub(selectedDeal.equipmentMargin)} · Работа: {formatRub(selectedDeal.workMargin)}
+                        </p>
+                      </div>
+                      <p className="text-lg font-black md:text-2xl">
+                        {selectedDeal.totalMargin >= 0 ? "+" : ""}{formatRub(selectedDeal.totalMargin)}
+                      </p>
+                    </div>
+                  </div>
 
-            {/* Действия */}
-            <div className="mt-4 flex gap-2 md:mt-5 md:gap-3">
-              <button
-                onClick={() => {
-                  setDeleteConfirm(selectedDeal.id);
-                  setSelectedDeal(null);
-                }}
-                className="flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2.5 text-xs font-semibold text-red-600 transition active:scale-95 hover:bg-red-50 md:px-4 md:text-sm"
-              >
-                🗑️ Удалить
-              </button>
-              <button
-                onClick={() => setSelectedDeal(null)}
-                className="ml-auto rounded-xl bg-slate-100 px-5 py-2.5 text-xs font-semibold text-slate-600 transition active:scale-95 hover:bg-slate-200 md:px-6 md:text-sm"
-              >
-                Закрыть
-              </button>
-            </div>
+                  {/* Заметки */}
+                  {selectedDeal.notes && (
+                    <div className="rounded-xl bg-slate-50 p-3 md:p-4">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:text-xs">Заметки</p>
+                      <p className="text-xs text-slate-700 md:text-sm">{selectedDeal.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Действия */}
+                <div className="mt-4 flex flex-wrap gap-2 md:mt-5 md:gap-3">
+                  <button
+                    onClick={() => {
+                      setEditForm({
+                        saleAmount: String(selectedDeal.saleAmount),
+                        purchaseAmount: String(selectedDeal.purchaseAmount),
+                        workAmount: String(selectedDeal.workAmount),
+                        materialsAmount: String(selectedDeal.materialsAmount),
+                        notes: selectedDeal.notes || "",
+                      });
+                      setEditMode(true);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md shadow-indigo-200 transition active:scale-95 hover:bg-indigo-700 md:text-sm"
+                  >
+                    ✏️ Редактировать
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDeleteConfirm(selectedDeal.id);
+                      setSelectedDeal(null);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2.5 text-xs font-semibold text-red-600 transition active:scale-95 hover:bg-red-50 md:px-4 md:text-sm"
+                  >
+                    🗑️ Удалить
+                  </button>
+                  <button
+                    onClick={() => { setSelectedDeal(null); setEditMode(false); }}
+                    className="ml-auto rounded-xl bg-slate-100 px-5 py-2.5 text-xs font-semibold text-slate-600 transition active:scale-95 hover:bg-slate-200 md:px-6 md:text-sm"
+                  >
+                    Закрыть
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

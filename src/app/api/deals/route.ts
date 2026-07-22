@@ -89,6 +89,59 @@ export async function POST(request: Request) {
   return NextResponse.json(row);
 }
 
+export async function PATCH(request: Request) {
+  const body = await request.json();
+  const { id, ...updates } = body;
+
+  if (!id) {
+    return NextResponse.json({ error: "id required" }, { status: 400 });
+  }
+
+  // Берём текущие значения из базы
+  const [existing] = await db
+    .select()
+    .from(deals)
+    .where(eq(deals.id, parseInt(id)));
+
+  if (!existing) {
+    return NextResponse.json({ error: "deal not found" }, { status: 404 });
+  }
+
+  // Обновляем только переданные поля — используем Partial<typeof deals.$inferInsert>
+  const updatedFields: Record<string, number | string | null> = {};
+
+  if (updates.saleAmount !== undefined) updatedFields.saleAmount = Number(updates.saleAmount);
+  if (updates.purchaseAmount !== undefined) updatedFields.purchaseAmount = Number(updates.purchaseAmount);
+  if (updates.workAmount !== undefined) updatedFields.workAmount = Number(updates.workAmount);
+  if (updates.materialsAmount !== undefined) updatedFields.materialsAmount = Number(updates.materialsAmount);
+  // Добавление к существующим значениям (для случаев "добавить расход")
+  if (updates.addSaleAmount) updatedFields.saleAmount = (existing.saleAmount || 0) + Number(updates.addSaleAmount);
+  if (updates.addPurchaseAmount) updatedFields.purchaseAmount = (existing.purchaseAmount || 0) + Number(updates.addPurchaseAmount);
+  if (updates.addWorkAmount) updatedFields.workAmount = (existing.workAmount || 0) + Number(updates.addWorkAmount);
+  if (updates.addMaterialsAmount) updatedFields.materialsAmount = (existing.materialsAmount || 0) + Number(updates.addMaterialsAmount);
+  if (updates.category !== undefined) updatedFields.category = String(updates.category);
+  if (updates.date !== undefined) updatedFields.date = String(updates.date);
+  if (updates.notes !== undefined) updatedFields.notes = String(updates.notes);
+
+  // Пересчитываем маржу с учётом новых значений
+  const finalSale = typeof updatedFields.saleAmount === 'number' ? updatedFields.saleAmount : existing.saleAmount;
+  const finalPurchase = typeof updatedFields.purchaseAmount === 'number' ? updatedFields.purchaseAmount : existing.purchaseAmount;
+  const finalWork = typeof updatedFields.workAmount === 'number' ? updatedFields.workAmount : existing.workAmount;
+  const finalMaterials = typeof updatedFields.materialsAmount === 'number' ? updatedFields.materialsAmount : existing.materialsAmount;
+
+  updatedFields.equipmentMargin = finalSale - finalPurchase;
+  updatedFields.workMargin = finalWork - finalMaterials;
+  updatedFields.totalMargin = finalSale - finalPurchase + finalWork - finalMaterials;
+
+  const [row] = await db
+    .update(deals)
+    .set(updatedFields as any)
+    .where(eq(deals.id, parseInt(id)))
+    .returning();
+
+  return NextResponse.json(row);
+}
+
 export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
