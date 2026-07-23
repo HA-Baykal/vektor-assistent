@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 type VoiceInputProps = {
   onResult: (text: string) => void;
   placeholder?: string;
   mode?: "task" | "deal" | "auto";
 };
+
+const SILENCE_TIMEOUT = 2000; // 2 секунды тишины → автозавершение
 
 export default function VoiceInput({
   onResult,
@@ -17,10 +19,52 @@ export default function VoiceInput({
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState("");
   const recognitionRef = useRef<any>(null);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFinalRef = useRef<string>(""); // последний финальный текст
+  const isProcessingRef = useRef(false); // защита от двойного submit
+
+  // Очистка таймера тишины
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
+
+  // Сброс таймера тишины (продлевает запись)
+  const resetSilenceTimer = useCallback(() => {
+    clearSilenceTimer();
+    silenceTimerRef.current = setTimeout(() => {
+      // 2 секунды тишины — автостоп + автоотправка
+      const currentText = lastFinalRef.current.trim();
+      if (currentText && !isProcessingRef.current) {
+        isProcessingRef.current = true;
+        stopListening();
+        onResult(currentText);
+        setTranscript("");
+        lastFinalRef.current = "";
+        setTimeout(() => { isProcessingRef.current = false; }, 500);
+      } else {
+        stopListening();
+      }
+    }, SILENCE_TIMEOUT);
+  }, [onResult, clearSilenceTimer]);
+
+  const stopListening = useCallback(() => {
+    clearSilenceTimer();
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setIsListening(false);
+  }, [clearSilenceTimer]);
 
   const startListening = useCallback(() => {
     setError("");
     setTranscript("");
+    lastFinalRef.current = "";
+    isProcessingRef.current = false;
 
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
@@ -37,6 +81,7 @@ export default function VoiceInput({
     recognition.lang = "ru-RU";
     recognition.continuous = true;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: any) => {
       let finalTranscript = "";
@@ -49,12 +94,21 @@ export default function VoiceInput({
           interimTranscript += result[0].transcript;
         }
       }
-      setTranscript(finalTranscript + interimTranscript);
+
+      if (finalTranscript) {
+        lastFinalRef.current += finalTranscript;
+        // Сбрасываем таймер тишины при каждом новом фрагменте речи
+        resetSilenceTimer();
+      }
+
+      setTranscript(lastFinalRef.current + interimTranscript);
     };
 
     recognition.onerror = (event: any) => {
       if (event.error === "no-speech") {
         setError("Речь не распознана. Попробуйте ещё раз.");
+      } else if (event.error === "aborted") {
+        // Это нормально — мы сами остановили запись
       } else {
         setError(`Ошибка: ${event.error}`);
       }
@@ -63,26 +117,45 @@ export default function VoiceInput({
 
     recognition.onend = () => {
       setIsListening(false);
+      // Если запись закончилась сама (не по нашей команде) — отправляем
+      const finalText = lastFinalRef.current.trim();
+      if (finalText && !isProcessingRef.current) {
+        isProcessingRef.current = true;
+        onResult(finalText);
+        setTranscript("");
+        lastFinalRef.current = "";
+        setTimeout(() => { isProcessingRef.current = false; }, 500);
+      }
+      clearSilenceTimer();
     };
 
     recognitionRef.current = recognition;
     recognition.start();
     setIsListening(true);
-  }, []);
+    // Запускаем таймер тишины сразу — если 2 сек нет речи, остановимся
+    resetSilenceTimer();
+  }, [onResult, resetSilenceTimer, clearSilenceTimer]);
 
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    setIsListening(false);
-  }, []);
+  // Очистка при размонтировании
+  useEffect(() => {
+    return () => {
+      clearSilenceTimer();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+    };
+  }, [clearSilenceTimer]);
 
-  const handleSubmit = () => {
-    if (transcript.trim()) {
+  const handleSubmit = useCallback(() => {
+    if (transcript.trim() && !isProcessingRef.current) {
+      isProcessingRef.current = true;
+      if (isListening) stopListening();
       onResult(transcript.trim());
       setTranscript("");
+      lastFinalRef.current = "";
+      setTimeout(() => { isProcessingRef.current = false; }, 500);
     }
-  };
+  }, [transcript, isListening, stopListening, onResult]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -131,7 +204,18 @@ export default function VoiceInput({
         <div className="flex shrink-0 flex-col gap-2">
           {isListening ? (
             <button
-              onClick={stopListening}
+              onClick={() => {
+                stopListening();
+                // Если есть текст — отправляем
+                const finalText = lastFinalRef.current.trim() || transcript.trim();
+                if (finalText && !isProcessingRef.current) {
+                  isProcessingRef.current = true;
+                  onResult(finalText);
+                  setTranscript("");
+                  lastFinalRef.current = "";
+                  setTimeout(() => { isProcessingRef.current = false; }, 500);
+                }
+              }}
               className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500 text-white shadow-lg transition active:scale-90 hover:bg-red-600 touch-target"
               aria-label="Остановить запись"
             >
