@@ -399,33 +399,56 @@ export type AdditionInfo = {
 export function parseAddition(input: string): AdditionInfo | null {
   const text = input.trim().toLowerCase();
 
-  // Проверяем маркеры добавления
-  const isAddition = /\b(?:ещё|еще|добав|дополнительно|ещо|доп|потратил|потрач)\b/i.test(text);
-  if (!isAddition) return null;
+  // Извлекаем номер сделки: "номер 10", "сделка 34", "сд 34", "№12"
+  const dealNumMatch = text.match(/(?:сделк[а-я]+\s*(?:№|#|номер|)?|объект\s+(?:№|#|номер|)?|(?:№|#|номер))\s*(\d+)/i);
+  let dealNumber: number | undefined;
+  if (dealNumMatch) {
+    dealNumber = parseInt(dealNumMatch[1]);
+  }
 
-  // Проверяем финансовые ключевые слова
-  const hasFinancial = /расход|материал|расходк|комплектац|фреон|кронштейн|закуп|купил|монтаж|работ/.test(text);
-  if (!hasFinancial) return null;
+  // Проверяем маркеры добавления — если есть номер сделки, "ещё" не обязательно
+  const hasExplicitMarker = /\b(?:ещё|еще|добав|дополнительно|ещо|доп|потратил|потрач|ещо)\b/i.test(text);
+  if (!hasExplicitMarker && !dealNumber) return null;
 
+  // Проверяем: есть ли финансовая информация или сумма
+  const hasFinancial = /расход|материал|расходк|комплектац|фреон|кронштейн|закуп|купил|монтаж|работ|потратил|потрач|объект|\d{2,}/.test(text);
+
+  // Ищем суммы для каждого типа
   const addMaterialsAmount = extractDealAmount(text, /расход|материал|расходк|комплектац|фреон|кронштейн|расходн/);
   const addPurchaseAmount = extractDealAmount(text, /купил|закуп|закупил|купи/);
   const addWorkAmount = extractDealAmount(text, /монтаж|работа|установк|оплат|монта/);
 
-  // Извлекаем номер сделки: "сделка 34", "сд 34", "номер 34"
-  const dealNumMatch = input.match(/(?:сделк[а-я]+\s*(?:№|#|номер|))\s*(\d+)|(?:№|#|номер)\s*(\d+)/i);
-  let dealNumber: number | undefined;
-  if (dealNumMatch) {
-    dealNumber = parseInt(dealNumMatch[1] || dealNumMatch[2]);
+  // Fallback: если не нашли по ключевым словам, но есть номер сделки — ищем любое число в тексте
+  let fallbackAmount = 0;
+  if (!addMaterialsAmount && !addPurchaseAmount && !addWorkAmount && dealNumber && hasFinancial) {
+    const nums = text.match(/\d+/g);
+    if (nums) {
+      const filtered = nums.map(Number).filter(n => n !== dealNumber && n > 0);
+      if (filtered.length > 0) {
+        fallbackAmount = filtered[0];
+        if (fallbackAmount < 100 && fallbackAmount >= 1) fallbackAmount *= 1000;
+      }
+    }
   }
 
-  // Если нет ни одной суммы — это не добавка
-  if (!addMaterialsAmount && !addPurchaseAmount && !addWorkAmount) return null;
+  // Второй fallback: если есть "ещё"/"потратил" и число (без номера сделки)
+  if (!addMaterialsAmount && !addPurchaseAmount && !addWorkAmount && !fallbackAmount && hasExplicitMarker) {
+    const nums = text.match(/\d+/g);
+    if (nums) {
+      const num = parseInt(nums[0]);
+      if (num > 0) {
+        fallbackAmount = num < 100 ? num * 1000 : num;
+      }
+    }
+  }
+
+  if (!addMaterialsAmount && !addPurchaseAmount && !addWorkAmount && !fallbackAmount) return null;
 
   return {
     type: "addition",
-    addMaterialsAmount,
-    addPurchaseAmount,
-    addWorkAmount,
+    addMaterialsAmount: addMaterialsAmount || (fallbackAmount > 0 ? fallbackAmount : 0),
+    addPurchaseAmount: addPurchaseAmount || 0,
+    addWorkAmount: addWorkAmount || 0,
     dealNumber,
     rawText: input,
   };
