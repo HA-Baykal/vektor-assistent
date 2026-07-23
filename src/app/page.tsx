@@ -1,65 +1,148 @@
-import { db } from "@/db";
-import { tasks, deals } from "@/db/schema";
-import { eq, gte, and, desc } from "drizzle-orm";
-import { formatRub, formatDateRu, formatWeekdayRu } from "@/lib/parser";
+"use client";
+
+import { useState, useEffect } from "react";
+import VoiceInput from "@/components/VoiceInput";
+import { formatRub, formatDateRu } from "@/lib/parser";
 import DashboardClient from "./DashboardClient";
 
-export const dynamic = "force-dynamic";
+type Task = {
+  id: number;
+  date: string;
+  time: string | null;
+  text: string;
+  status: string;
+};
 
-export default async function HomePage() {
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1)
-    .toString()
-    .padStart(2, "0")}-${today.getDate().toString().padStart(2, "0")}`;
+type Deal = {
+  id: number;
+  date: string;
+  category: string;
+  saleAmount: number;
+  purchaseAmount: number;
+  workAmount: number;
+  materialsAmount: number;
+  totalMargin: number;
+};
 
-  // Задачи на сегодня
-  const todayTasks = await db
-    .select()
-    .from(tasks)
-    .where(and(eq(tasks.date, todayStr)))
-    .orderBy(tasks.time);
+type DashboardData = {
+  todayTasks: Task[];
+  todayDeals: Deal[];
+  weekMargin: number;
+  weekRevenue: number;
+  todayMargin: number;
+  activeTasksCount: number;
+  todayStr: string;
+  todayLabel: string;
+  weekday: string;
+};
 
-  // Сделки за сегодня
-  const todayDeals = await db
-    .select()
-    .from(deals)
-    .where(eq(deals.date, todayStr))
-    .orderBy(desc(deals.createdAt));
+export default function HomePage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Маржа за неделю
-  const weekAgo = new Date(today);
-  weekAgo.setDate(weekAgo.getDate() - 6);
-  const weekAgoStr = `${weekAgo.getFullYear()}-${(weekAgo.getMonth() + 1)
-    .toString()
-    .padStart(2, "0")}-${weekAgo.getDate().toString().padStart(2, "0")}`;
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        const res = await fetch("/api/dashboard");
+        if (!res.ok) throw new Error("Ошибка загрузки");
+        const json = await res.json();
+        setData(json);
+      } catch (e) {
+        console.error("Dashboard error:", e);
+        setError("Не удалось загрузить данные. Попробуйте обновить страницу.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboard();
+  }, []);
 
-  const weekDeals = await db
-    .select()
-    .from(deals)
-    .where(gte(deals.date, weekAgoStr));
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600" />
+      </div>
+    );
+  }
 
-  const weekMargin = weekDeals.reduce((s, d) => s + d.totalMargin, 0);
-  const weekRevenue = weekDeals.reduce((s, d) => s + d.saleAmount, 0);
-  const todayMargin = todayDeals.reduce((s, d) => s + d.totalMargin, 0);
+  if (error || !data) {
+    return (
+      <div className="space-y-5 md:space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 md:text-2xl">
+            Доброе утро! 👋
+          </h1>
+          <p className="mt-0.5 text-xs text-slate-500 md:text-sm">
+            {new Date().toLocaleDateString("ru-RU", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
+        </div>
 
-  // Активные задачи (предстоящие)
-  const activeTasks = await db
-    .select()
-    .from(tasks)
-    .where(and(eq(tasks.status, "active"), gte(tasks.date, todayStr)))
-    .orderBy(tasks.date, tasks.time);
+        {/* Voice input */}
+        <div className="animate-fade-in-up rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 p-4 shadow-xl md:p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-lg">🎙️</span>
+            <h2 className="text-sm font-semibold text-white">
+              Голосовое управление
+            </h2>
+          </div>
+          <VoiceInput
+            onResult={async (text) => {
+              // Просто передаём текст — API обработает
+              try {
+                const parsedRes = await fetch("/api/parse", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ text }),
+                });
+                const parsed = await parsedRes.json();
+                if (parsed.type === "tasks") {
+                  await fetch("/api/tasks", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text }),
+                  });
+                } else if (parsed.type === "deals") {
+                  await fetch("/api/deals", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text }),
+                  });
+                }
+                // Обновляем страницу
+                window.location.reload();
+              } catch {
+                // игнорируем
+              }
+            }}
+            placeholder='Например: "Завтра в 9 утра замер на Ленина 15" или "Продал кондиционер за 40 тысяч"'
+          />
+        </div>
 
-  return (
-    <DashboardClient
-      todayTasks={todayTasks}
-      todayDeals={todayDeals}
-      weekMargin={weekMargin}
-      weekRevenue={weekRevenue}
-      todayMargin={todayMargin}
-      activeTasksCount={activeTasks.length}
-      todayStr={todayStr}
-      todayLabel={formatDateRu(todayStr)}
-      weekday={formatWeekdayRu(todayStr)}
-    />
-  );
+        {/* Error message */}
+        <div className="animate-fade-in-up rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
+          <p className="text-3xl mb-2">⚠️</p>
+          <p className="text-sm font-medium text-amber-800">
+            {error || "Загрузка данных..."}
+          </p>
+          <p className="mt-1 text-xs text-amber-600">
+            Данные скоро появятся. Вы можете продолжать пользоваться голосовым вводом.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-3 rounded-xl bg-amber-500 px-5 py-2 text-sm font-semibold text-white hover:bg-amber-600 transition active:scale-95"
+          >
+            🔄 Обновить
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return <DashboardClient {...data} />;
 }
