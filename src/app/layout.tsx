@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import ThemeProvider from "@/components/ThemeProvider";
+import PinGuard from "@/components/PinGuard";
 
 export const metadata: Metadata = {
   title: "Вектор Ассистент — ИИ-ассистент предпринимателя",
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="ru" className="overscroll-none">
       <body className="bg-slate-100 text-slate-900 antialiased">
         <ThemeProvider />
+        <PinGuard>
         <div className="flex min-h-dvh">
           {/* ===== DESKTOP SIDEBAR ===== */}
           <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-slate-900 p-5 pt-safe lg:flex">
@@ -99,6 +101,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
         </div>
+        </PinGuard>
       </body>
     </html>
   );

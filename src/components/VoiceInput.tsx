@@ -8,7 +8,7 @@ type VoiceInputProps = {
   mode?: "task" | "deal" | "auto";
 };
 
-const SILENCE_TIMEOUT = 2000; // 2 секунды тишины → автозавершение
+const SILENCE_TIMEOUT = 3000; // 3 секунды тишины → автозавершение
 
 export default function VoiceInput({
   onResult,
