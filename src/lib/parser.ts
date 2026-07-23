@@ -50,14 +50,12 @@ export function extractDate(text: string, baseDate: Date = new Date()): string {
   const today = new Date(baseDate);
   today.setHours(0, 0, 0, 0);
 
-  // Относительные даты
   if (/(?:^|\s|,)завтра(?:,|\s|$)/.test(lower)) return formatDate(addDays(today, 1));
   if (/(?:^|\s|,)послезавтра(?:,|\s|$)/.test(lower)) return formatDate(addDays(today, 2));
   if (/(?:^|\s|,)вчера(?:,|\s|$)/.test(lower)) return formatDate(addDays(today, -1));
   if (/(?:^|\s|,)позавчера(?:,|\s|$)/.test(lower)) return formatDate(addDays(today, -2));
   if (/(?:^|\s|,)сегодня(?:,|\s|$)/.test(lower)) return formatDate(today);
 
-  // День недели
   const weekdays: Record<string, number> = {
     "понедельник": 1, "вторник": 2, "сред": 3, "четверг": 4,
     "пятниц": 5, "суббот": 6, "воскресен": 0,
@@ -72,7 +70,6 @@ export function extractDate(text: string, baseDate: Date = new Date()): string {
     }
   }
 
-  // "22 июля" / "22 июля 2025"
   const dateMonthRegex = /(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-я]*/i;
   const dmMatch = lower.match(dateMonthRegex);
   if (dmMatch) {
@@ -89,7 +86,6 @@ export function extractDate(text: string, baseDate: Date = new Date()): string {
     }
   }
 
-  // "22.07" или "22/07" или "22-07"
   const numericRegex = /(\d{1,2})[.\-\/](\d{1,2})(?:[.\-\/](\d{2,4}))?/;
   const numMatch = text.match(numericRegex);
   if (numMatch) {
@@ -115,7 +111,6 @@ function addDays(date: Date, days: number): Date {
 export function extractTime(text: string): string | null {
   const lower = text.toLowerCase();
 
-  // "в 9:30 утра" / "в 9:30"
   const fullTimeRegex = /в\s+(\d{1,2})[:\s\.](\d{2})\s*(утра|вечера)?/i;
   const ftMatch = lower.match(fullTimeRegex);
   if (ftMatch) {
@@ -127,7 +122,6 @@ export function extractTime(text: string): string | null {
     }
   }
 
-  // "16:00" / "16.00"
   const colonMatch = text.match(/(\d{1,2})[:\\.](\d{2})/);
   if (colonMatch) {
     const h = parseInt(colonMatch[1]);
@@ -137,7 +131,6 @@ export function extractTime(text: string): string | null {
     }
   }
 
-  // "в 9 утра" / "в 9 вечера" / "к 12"
   const hourWordRegex = /(?:в|к|во|на)\s+(\d{1,2})(?:\s+(утра|вечера|дня|часов|часа|час))?/i;
   const hwMatch = lower.match(hourWordRegex);
   if (hwMatch) {
@@ -153,11 +146,11 @@ export function extractTime(text: string): string | null {
   return null;
 }
 
-// Извлекает число (сумму) из текста. Поддерживает "30 тысяч", "17700", "5 тыс"
+// Извлекает число (сумму) из текста
 export function extractAmount(text: string): number {
   const lower = text.toLowerCase();
 
-  // "30 тысяч" / "30 тыс" / "30 т"
+  // "30 тысяч" / "30 тыс"
   const thousandRegex = /(\d+(?:[.,]\d+)?)\s*(тысяч|тыс|т\b)/i;
   const tMatch = lower.match(thousandRegex);
   if (tMatch) {
@@ -165,14 +158,14 @@ export function extractAmount(text: string): number {
     return Math.round(num * 1000);
   }
 
-  // "30 к" — "к" может быть в конце "30к"
+  // "30к"
   const kRegex = /(\d+)\s*к\b/i;
   const kMatch = lower.match(kRegex);
   if (kMatch) {
     return parseInt(kMatch[1]) * 1000;
   }
 
-  // "17700" — просто число
+  // Просто число
   const numMatch = text.match(/(\d{2,6}(?:\s?\d{3})*)/);
   if (numMatch) {
     return parseInt(numMatch[1].replace(/\s/g, ""));
@@ -197,7 +190,6 @@ export function parseInput(input: string): ParseResult {
   const text = input.trim();
   const lower = text.toLowerCase();
 
-  // Проверяем, финансовый ли это ввод
   const hasFinancialKeywords = /продал|купил|закуп|монтаж|продаж|марж|прибыл|объект|работа|материал|комплектац|расход/.test(lower);
 
   if (hasFinancialKeywords) {
@@ -207,7 +199,6 @@ export function parseInput(input: string): ParseResult {
     }
   }
 
-  // Проверяем, есть ли задачи
   const tasks = parseTasks(text);
   if (tasks.length > 0) {
     return { type: "tasks", tasks, deals: [], rawText: text };
@@ -221,7 +212,6 @@ function parseTasks(text: string): ParsedTask[] {
   const tasks: ParsedTask[] = [];
   const baseDate = new Date();
 
-  // Разбиваем по разделителям: "потом", "затем", и запятым перед задачами с временем
   const parts = text
     .replace(/\s*(?:потом|затем|после этого|далее|ещё)\s*/gi, " | ")
     .replace(/,\s*(?=(?:в|к|на|за|с)\s+\d)/g, " | ")
@@ -229,13 +219,10 @@ function parseTasks(text: string): ParsedTask[] {
     .map((p) => p.trim())
     .filter((p) => p.length > 2);
 
-  const finalParts = parts;
-
-  for (const part of finalParts) {
+  for (const part of parts) {
     const date = extractDate(part, baseDate);
     const time = extractTime(part);
 
-    // Очищаем текст от временных и датевых маркеров
     let cleanText = part
       .replace(/завтра|сегодня|послезавтра|вчера|позавчера/gi, "")
       .replace(/(?:^|\s)в\s+\d{1,2}[:\\.]?\d{0,2}\s*(утра|вечера|дня|часов|часа|час)?/gi, " ")
@@ -248,11 +235,9 @@ function parseTasks(text: string): ParsedTask[] {
       .replace(/\s+/g, " ")
       .trim();
 
-    // Убираем лишние предлоги в начале
     cleanText = cleanText.replace(/^(в|во|на|к|с|со|и|,)\s+/i, "").trim();
     cleanText = cleanText.replace(/^[,;\s]+/, "").trim();
 
-    // Капитализируем первую букву
     if (cleanText.length > 0) {
       cleanText = cleanText.charAt(0).toUpperCase() + cleanText.slice(1);
     }
@@ -265,39 +250,30 @@ function parseTasks(text: string): ParsedTask[] {
   return tasks;
 }
 
-// ============================================================
-// ИСПРАВЛЕННАЯ функция извлечения суммы по ключевому слову
-// ============================================================
-
-// Извлекает сумму из текста, ища число рядом с ключевым словом
+// Извлекает сумму из текста, ища ЧИСЛО РЯДОМ с ключевым словом
 function extractDealAmount(text: string, keywordRegex: RegExp): number {
   const lower = text.toLowerCase();
-
-  // Клонируем regex, чтобы сбросить lastIndex
   const regex = new RegExp(keywordRegex.source, keywordRegex.flags + "g");
   
   let totalAmount = 0;
   let match;
 
   while ((match = regex.exec(lower)) !== null) {
-    const keywordIndex = match.index;
-    const keywordEnd = keywordIndex + match[0].length;
-    
-    // Смотрим текст после ключевого слова (до 100 символов)
-    const afterKeyword = text.slice(keywordEnd, keywordEnd + 100);
-    // И немного перед ключевым словом (на случай "за 40 продал")
-    const beforeKeyword = text.slice(Math.max(0, keywordIndex - 40), keywordIndex);
+    // Пропускаем, если ключевое слово — часть другого слова
+    if (match.index > 0 && /[а-яёa-z]/.test(lower[match.index - 1])) continue;
 
-    // Пробуем извлечь сумму из текста после ключевого слова
+    const keywordEnd = match.index + match[0].length;
+    
+    const afterKeyword = text.slice(keywordEnd, keywordEnd + 100);
+    const beforeKeyword = text.slice(Math.max(0, match.index - 40), match.index);
+
     const amountAfter = extractAmount(afterKeyword);
     if (amountAfter > 0) {
       totalAmount += amountAfter;
-      // Пропускаем текст, чтобы не найти то же число повторно
       regex.lastIndex = keywordEnd + afterKeyword.length;
       continue;
     }
 
-    // Если после не нашли, пробуем перед
     const amountBefore = extractAmount(beforeKeyword);
     if (amountBefore > 0) {
       totalAmount += amountBefore;
@@ -307,16 +283,13 @@ function extractDealAmount(text: string, keywordRegex: RegExp): number {
   return totalAmount;
 }
 
-// ============================================================
 // Парсит финансовые сделки
-// ============================================================
 function parseDeals(text: string): ParsedDeal[] {
   const deals: ParsedDeal[] = [];
   const baseDate = new Date();
   const date = extractDate(text, baseDate);
   const category = detectCategory(text);
 
-  // Разбиваем на отдельные сделки по "первый", "второй", etc.
   const dealMarkers = /(?:^|\s|[.]\s*)(первый|второй|третий|четвёртый|пятая|шестой|седьмой|восьмой)/gi;
 
   let dealTexts: string[] = [];
@@ -361,6 +334,160 @@ function parseDeals(text: string): ParsedDeal[] {
   return deals;
 }
 
+// ============================================================
+// ДОБАВЛЕНИЯ К СУЩЕСТВУЮЩИМ СДЕЛКАМ
+// ============================================================
+
+export type AdditionType = "expense" | "income";
+
+export type AdditionInfo = {
+  type: "addition";
+  additionType: AdditionType;
+  addSaleAmount: number;
+  addWorkAmount: number;
+  addMaterialsAmount: number;
+  addPurchaseAmount: number;
+  dealNumber?: number;
+  rawText: string;
+};
+
+// Слова дохода — каждое слово проверяется через \b (граница слова)
+const INCOME_WORDS = [
+  "заработал", "заработали", "заработано",
+  "добавил", "добавили", "добавлено",
+  "получил", "получили", "получено",
+  "пришло", "пришли", "поступило", "поступили",
+  "доплата", "доплатили", "доплачено",
+  "доплат",  // для "доплатили" и т.д.
+  "навар", "прибыль",
+  "подняли", "повысили", "увеличили",
+  "взяли", "взял", "берём", "возьмём",
+  "накинули", "накинем",
+  "сверх", "сверху", "дополнительно",
+  "плюс", "плюсом",
+  "денег", "деньги",
+  "доход", "дохода",
+  "выручка",
+  "аванс", "предоплата",
+];
+
+// Слова расхода
+const EXPENSE_WORDS = [
+  "потратил", "потратили", "потрачено", "потрач",
+  "расход", "расходы", "расходка", "расходн",
+  "затратил", "затратили", "затраты",
+  "ушло", "ушли",
+  "отдал", "отдали",
+  "заплатил", "заплатили",
+  "издержки",
+  "сняли", "снял",
+  "покупка", "купил", "купили", "закупил", "закупили", "закуп",
+  "материал", "материалы", "комплектация", "комплектуха",
+  "фреон", "кронштейн", "кронштейны",
+  "товар", "товары",
+];
+
+const SALE_WORDS = ["продал", "продажа", "сдали", "сдать", "реализовали", "реализация"];
+
+// Проверяет, что слово встречается как отдельное слово (не часть другого слова)
+function isWordInText(text: string, word: string): boolean {
+  const regex = new RegExp(`\\b${word.toLowerCase()}\\b`, 'i');
+  return regex.test(text);
+}
+
+export function parseAddition(input: string): AdditionInfo | null {
+  const text = input.trim().toLowerCase();
+  if (!text) return null;
+
+  // Извлекаем номер сделки
+  const dealNumMatch = text.match(
+    /(?:сделк[а-я]+\s*(?:№|#|номер|)?|объект\s*(?:№|#|номер|)?|номер[а-я]*\s*(?:№|#|)?|(?:№|#))\s*(\d+)/i
+  );
+  let dealNumber: number | undefined;
+  if (dealNumMatch) {
+    dealNumber = parseInt(dealNumMatch[1]);
+  }
+
+  // Проверяем слова с границами — каждое слово должно быть отдельным
+  const hasIncomeWord = INCOME_WORDS.some(w => isWordInText(text, w));
+  const hasExpenseWord = EXPENSE_WORDS.some(w => isWordInText(text, w));
+  const hasSaleWord = SALE_WORDS.some(w => isWordInText(text, w));
+  
+  // Маркеры "ещё", "еще" тоже через границу
+  const hasGenericMarker = /\b(?:ещё|еще|ещо|дополнительно)\b/i.test(text);
+  
+  // Есть ли число в тексте (от 2 цифр)
+  const hasNumber = /\d{2,}/.test(text);
+
+  // Если нет вообще никаких маркеров и номера — пропускаем
+  if (!hasIncomeWord && !hasExpenseWord && !hasSaleWord && !hasGenericMarker && !dealNumber) return null;
+
+  // Определяем тип: по умолчанию расход, если есть слово дохода — доход
+  let additionType: AdditionType = "expense";
+  if (hasIncomeWord || hasSaleWord) {
+    additionType = "income";
+  }
+
+  // ===== Извлекаем суммы с ЧЁТКИМИ границами слов =====
+  // Чтобы "оплат" не находился внутри "доплатили"
+
+  // Для дохода: проверяем ключевые слова как ОТДЕЛЬНЫЕ слова
+  const addSaleAmount = extractDealAmount(text, /\b(?:прода[жл]|продаж|сдал|реализова|заработал|добавил|получил|пришл[ои]|поступил|взял[и]?|поднял|увеличил|накинул|доплат|прибыл|выручк|аванс)\b/);
+  const addWorkAmount = extractDealAmount(text, /\b(?:монтаж|работа|услуг)\b/);
+  const addMaterialsAmount = extractDealAmount(text, /\b(?:расход|материал|расходк|расходн|комплектац|фреон|кронштейн|потратил|потрач|ушл[ои]|отдал|заплатил|снял|товар)\b/);
+  const addPurchaseAmount = extractDealAmount(text, /\b(?:купил|купили|закуп|закупил|покупк)\b/);
+
+  // Fallback: если не нашли ни одной суммы, но есть число — пробуем просто взять число из текста
+  let fallbackAmount = 0;
+  if (!addSaleAmount && !addPurchaseAmount && !addWorkAmount && !addMaterialsAmount) {
+    const nums = text.match(/\d+/g);
+    if (nums) {
+      let candidates = nums.map(Number).filter(n => n > 0);
+      if (dealNumber) candidates = candidates.filter(n => n !== dealNumber);
+      
+      if (candidates.length > 0) {
+        // Берём первое подходящее число
+        for (const c of candidates) {
+          if (c >= 100) { fallbackAmount = c; break; }
+        }
+        if (!fallbackAmount && candidates.length > 0) {
+          fallbackAmount = candidates[0] < 100 ? candidates[0] * 1000 : candidates[0];
+        }
+      }
+      // Последняя попытка — первое число в тексте
+      if (!fallbackAmount && nums.length > 0) {
+        const n = parseInt(nums[0]);
+        if (n > 0 && n !== dealNumber) {
+          fallbackAmount = n < 100 ? n * 1000 : n;
+        }
+      }
+    }
+  }
+
+  // Нет ни одной суммы — не добавка
+  if (!addSaleAmount && !addPurchaseAmount && !addWorkAmount && !addMaterialsAmount && !fallbackAmount) {
+    return null;
+  }
+
+  // Если это income, fallback идёт в продажу
+  // Если это expense, fallback идёт в расходы
+  const result: AdditionInfo = {
+    type: "addition",
+    additionType,
+    addSaleAmount: addSaleAmount || (additionType === "income" && fallbackAmount ? fallbackAmount : 0),
+    addWorkAmount: addWorkAmount || 0,
+    addMaterialsAmount: addMaterialsAmount || (additionType === "expense" && !addPurchaseAmount ? fallbackAmount : 0),
+    addPurchaseAmount: addPurchaseAmount || 0,
+    dealNumber,
+    rawText: input,
+  };
+
+  // Логируем для отладки
+  console.log("parseAddition result:", JSON.stringify(result));
+
+  return result;
+}
+
 // Форматирует сумму в рублях
 export function formatRub(amount: number): string {
   const sign = amount < 0 ? "-" : "";
@@ -383,148 +510,6 @@ export function formatWeekdayRu(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
   const days = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
   return days[d.getDay()];
-}
-
-// Определяет тип добавки: расход или доход
-// "потратил ещё 2500" → РАСХОД (materials)
-// "добавил ещё 5000" → ДОХОД (sale)
-// "заработал ещё 3000" → ДОХОД (sale)
-export type AdditionType = "expense" | "income" | "expense_purchase" | "income_work";
-
-export type AdditionInfo = {
-  type: "addition";
-  additionType: AdditionType; // что именно добавляем
-  addSaleAmount: number;     // доход (продажа)
-  addWorkAmount: number;     // доход (работа/монтаж)
-  addMaterialsAmount: number; // расход (материалы/расходка)
-  addPurchaseAmount: number;  // расход (закупка)
-  dealNumber?: number;
-  rawText: string;
-};
-
-// Универсальные русские слова для всех случаев
-const INCOME_WORDS = [
-  "заработал", "заработали", "заработано",
-  "добавил", "добавили", "добавлено",
-  "получил", "получили", "получено",
-  "пришло", "пришли", "поступило", "поступили",
-  "доплата", "доплатили", "доплачено",
-  "навар", "прибыль",
-  "подняли", "повысили", "увеличили",
-  "взяли", "взял", "берём", "возьмём",
-  "оплатили", "оплачено", "оплата",
-  "переплата", "переплатили",
-  "накинули", "накинем",
-  "сверх", "сверху", "дополнительно",
-  "плюс", "плюсом",
-  "денег", "деньги",
-  "доход", "дохода",
-  "выручка",
-  "калькуляция",
-  "аванс", "предоплата",
-];
-
-const EXPENSE_WORDS = [
-  "потратил", "потратили", "потрачено", "потрач",
-  "расход", "расходы", "расходка", "расходн",
-  "затратил", "затратили", "затраты",
-  "ушло", "ушли",
-  "отдал", "отдали",
-  "заплатил", "заплатили",
-  "оплатил", "оплатили", "оплачено",
-  "издержки",
-  "сняли", "снял",
-  "покупка", "купил", "купили", "закупил", "закупили", "закуп",
-  "материал", "материалы", "комплектация", "комплектуха",
-  "фреон", "кронштейн", "кронштейны",
-  "товар", "товары",
-];
-
-const SALE_WORDS = ["продал", "продажа", "сдали", "сдать", "реализовали", "реализация"];
-
-export function parseAddition(input: string): AdditionInfo | null {
-  const text = input.trim().toLowerCase();
-
-  // Извлекаем номер сделки: поддержка всех форматов
-  const dealNumMatch = text.match(
-    /(?:сделк[а-я]+\s*(?:№|#|номер|)?|объект\s*(?:№|#|номер|)?|номер[а-я]*\s*(?:№|#|)?|(?:№|#))\s*(\d+)/i
-  );
-  let dealNumber: number | undefined;
-  if (dealNumMatch) {
-    dealNumber = parseInt(dealNumMatch[1]);
-  }
-
-  // Проверяем — есть ли хоть одно слово-маркер (доход, расход или просто "ещё")
-  const hasIncomeWord = INCOME_WORDS.some(w => text.includes(w));
-  const hasExpenseWord = EXPENSE_WORDS.some(w => text.includes(w));
-  const hasSaleWord = SALE_WORDS.some(w => text.includes(w));
-  const hasGenericMarker = /\b(?:ещё|еще|ещо|доп|дополнительно|ещё|еще)\b/i.test(text);
-  const hasNumber = /\d{2,}/.test(text);
-
-  // Если нет ни маркера, ни номера сделки — не добавка
-  if (!hasIncomeWord && !hasExpenseWord && !hasSaleWord && !hasGenericMarker && !dealNumber) return null;
-  // Если нет номера сделки и нет маркера (но есть цифры) — тоже не добавка
-  if (!dealNumber && !hasIncomeWord && !hasExpenseWord && !hasSaleWord && !hasGenericMarker) return null;
-
-  const hasFinancialInfo = hasIncomeWord || hasExpenseWord || hasSaleWord || hasGenericMarker || hasNumber;
-
-  // Определяем тип добавки по ключевым словам
-  // По умолчанию — расходы (самое частое)
-  let additionType: AdditionType = "expense";
-
-  // Если есть явное слово дохода — это доход
-  if (hasIncomeWord || hasSaleWord) {
-    additionType = "income";
-  }
-  // Слова "купил/закуп/материал" явно указывают на расход
-  if (hasExpenseWord && !hasIncomeWord && !hasSaleWord) {
-    additionType = "expense";
-  }
-  // Если только generic маркер "ещё" + номер — это расход (по умолчанию)
-  if (hasGenericMarker && !hasIncomeWord && !hasExpenseWord && !hasSaleWord) {
-    additionType = "expense";
-  }
-
-  // Извлекаем суммы для разных типов
-  const addMaterialsAmount = extractDealAmount(text, /расход|материал|расходк|расходн|комплектац|фреон|кронштейн|потратил|потрач|ушло|отдал|заплатил|издержк|снял|товар/);
-  const addPurchaseAmount = extractDealAmount(text, /купил|купили|закуп|закупил|покупк/);
-  const addSaleAmount = extractDealAmount(text, /продал|продаж|сдал|реализова|заработал|добавил|получил|пришло|поступил|взял|взяли|поднял|увеличил|накинул|доплат|прибыл|выручк|аванс/);
-  const addWorkAmount = extractDealAmount(text, /монтаж|работа|установк|оплат|монта|услуг/);
-
-  // Fallback: если не нашли ни одной суммы, но есть номер сделки
-  let fallbackAmount = 0;
-  if (!addMaterialsAmount && !addPurchaseAmount && !addSaleAmount && !addWorkAmount) {
-    const nums = text.match(/\d+/g);
-    if (nums) {
-      let filtered = nums.map(Number).filter(n => n > 0);
-      if (dealNumber) filtered = filtered.filter(n => n !== dealNumber);
-      if (filtered.length > 0) {
-        fallbackAmount = filtered[0];
-        if (fallbackAmount < 100) fallbackAmount *= 1000;
-      }
-    }
-    // Если всё ещё нет — последняя попытка, просто первое число
-    if (!fallbackAmount && nums) {
-      const n = parseInt(nums[0]);
-      if (n > 0 && n !== dealNumber) {
-        fallbackAmount = n < 100 ? n * 1000 : n;
-      }
-    }
-  }
-
-  const hasAnyAmount = !!(addMaterialsAmount || addPurchaseAmount || addSaleAmount || addWorkAmount || fallbackAmount);
-  if (!hasAnyAmount) return null;
-
-  return {
-    type: "addition",
-    additionType,
-    addSaleAmount: addSaleAmount || (additionType === "income" && fallbackAmount ? fallbackAmount : 0),
-    addWorkAmount: addWorkAmount || 0,
-    addMaterialsAmount: addMaterialsAmount || (additionType === "expense" && !addSaleAmount ? fallbackAmount : 0),
-    addPurchaseAmount: addPurchaseAmount || 0,
-    dealNumber,
-    rawText: input,
-  };
 }
 
 // Форматирует дату полностью: "22 июля 2025, вторник"
