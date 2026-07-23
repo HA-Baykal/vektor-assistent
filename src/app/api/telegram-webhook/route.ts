@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { sendMessage } from "@/lib/telegram";
 import { parseInput, parseAddition, formatRub, formatDateRu } from "@/lib/parser";
 import { db } from "@/db";
-import { allowedUsers } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { allowedUsers, inviteCodes } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -206,25 +206,30 @@ async function handleOwnerCommand(chatId: number, text: string, userName: string
   // /token — сгенерировать новый код доступа (постоянный)
   if (lower === "/token" || lower === "/токен") {
     try {
-      const res = await fetch(`${APP_URL}/api/invite-codes/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
+      // Прямая работа с БД, без fetch
+      const CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let code = "";
+      for (let i = 0; i < 6; i++) code += CHARS[Math.floor(Math.random() * CHARS.length)];
 
-      if (!res.ok) throw new Error("API error");
-      const data = await res.json();
+      // Убедимся что таблица есть
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS invite_codes (
+        id SERIAL PRIMARY KEY, code VARCHAR(10) NOT NULL UNIQUE,
+        label VARCHAR(255) DEFAULT '', active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )`);
+
+      await db.insert(inviteCodes).values({ code, label: "", active: true });
 
       await safeSend(chatId,
         `🔑 <b>Новый код доступа</b>\n\n` +
-        `<code>${data.code}</code>\n\n` +
+        `<code>${code}</code>\n\n` +
         `Этот код даёт постоянный доступ к веб-приложению.\n` +
         `Можно использовать с любого устройства.\n` +
         `Действует пока вы не отзовёте его.\n\n` +
-        `Чтобы отозвать: /revokecode ${data.code}`
+        `Чтобы отозвать: /revokecode ${code}`
       );
-    } catch {
-      await safeSend(chatId, `❌ Ошибка при генерации кода.`);
+    } catch (err: any) {
+      await safeSend(chatId, `❌ Ошибка при генерации кода: ${err?.message || "неизвестная"}`);
     }
     return true;
   }
@@ -232,20 +237,19 @@ async function handleOwnerCommand(chatId: number, text: string, userName: string
   // /codes — список всех кодов
   if (lower === "/codes" || lower === "/коды") {
     try {
-      const res = await fetch(`${APP_URL}/api/invite-codes/list`);
-      if (!res.ok) throw new Error("API error");
-      const codes = await res.json();
+      const rows = await db.select().from(inviteCodes).orderBy(desc(inviteCodes.createdAt));
 
-      if (!codes || codes.length === 0) {
+      if (!rows || rows.length === 0) {
         await safeSend(chatId, `📭 Нет кодов доступа.\n\nСоздайте: /token`);
       } else {
-        const list = codes.map((c: any) => {
+        const list = rows.map((c: any) => {
           const status = c.active ? "✅ Активен" : "❌ Отозван";
-          return `• <code>${c.code}</code> — ${status}`;
+          const createdAt = new Date(c.createdAt).toLocaleString("ru-RU", { day: "numeric", month: "short", timeZone: "Asia/Irkutsk" });
+          return `• <code>${c.code}</code> — ${status} (${createdAt})`;
         }).join("\n");
 
         await safeSend(chatId,
-          `🔑 <b>Коды доступа</b>\n\n${list}\n\n` +
+          `🔑 <b>Коды доступа</b> (${rows.length})\n\n${list}\n\n` +
           `Создать: /token\n` +
           `Отозвать: /revokecode КОД`
         );
@@ -264,19 +268,14 @@ async function handleOwnerCommand(chatId: number, text: string, userName: string
       return true;
     }
     try {
-      const res = await fetch(`${APP_URL}/api/invite-codes/revoke`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-
-      if (res.ok) {
+      const result = await db.update(inviteCodes).set({ active: false }).where(eq(inviteCodes.code, code));
+      if (result) {
         await safeSend(chatId, `✅ Код ${code} отозван. Больше никто не сможет им воспользоваться.`);
       } else {
         await safeSend(chatId, `❌ Код ${code} не найден.`);
       }
     } catch {
-      await safeSend(chatId, `❌ Ошибка.`);
+      await safeSend(chatId, `❌ Ошибка при отзыве кода.`);
     }
     return true;
   }
