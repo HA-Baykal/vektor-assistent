@@ -26,6 +26,14 @@ export const tasks = pgTable("tasks", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const allowedUsers = pgTable("allowed_users", {
+  id: serial("id").primaryKey(),
+  chatId: varchar("chat_id", { length: 100 }).notNull().unique(),
+  userName: varchar("user_name", { length: 255 }).default(""),
+  accessLevel: varchar("access_level", { length: 20 }).notNull().default("read"), // "read" | "write" | "owner"
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const deals = pgTable("deals", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().default(1),

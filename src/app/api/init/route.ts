@@ -75,6 +75,18 @@ export async function GET() {
     `);
     logs.push("✅ Номера сделок установлены для старых записей");
 
+    // Таблица разрешений для Telegram бота
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS allowed_users (
+        id SERIAL PRIMARY KEY,
+        chat_id VARCHAR(100) NOT NULL UNIQUE,
+        user_name VARCHAR(255) DEFAULT '',
+        access_level VARCHAR(20) NOT NULL DEFAULT 'read',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+    logs.push("✅ allowed_users — OK");
+
     // Проверяем, что таблицы работают
     const tasksCount = await db.execute(sql`SELECT COUNT(*) as count FROM tasks`);
     const dealsCount = await db.execute(sql`SELECT COUNT(*) as count FROM deals`);
