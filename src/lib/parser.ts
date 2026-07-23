@@ -390,9 +390,17 @@ const EXPENSE_WORDS = [
 const SALE_WORDS = ["продал", "продажа", "сдали", "сдать", "реализовали", "реализация"];
 
 // Проверяет, что слово встречается как отдельное слово (не часть другого слова)
+// НЕ используем \b — он не работает с кириллицей в JavaScript!
 function isWordInText(text: string, word: string): boolean {
-  const regex = new RegExp(`\\b${word.toLowerCase()}\\b`, 'i');
-  return regex.test(text);
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(word.toLowerCase());
+  if (idx === -1) return false;
+  // Проверяем, что перед словом не буква
+  if (idx > 0 && /[а-яёa-z0-9]/.test(lower[idx - 1])) return false;
+  // Проверяем, что после слова не буква
+  const afterIdx = idx + word.length;
+  if (afterIdx < lower.length && /[а-яёa-z0-9]/.test(lower[afterIdx])) return false;
+  return true;
 }
 
 export function parseAddition(input: string): AdditionInfo | null {
@@ -413,8 +421,8 @@ export function parseAddition(input: string): AdditionInfo | null {
   const hasExpenseWord = EXPENSE_WORDS.some(w => isWordInText(text, w));
   const hasSaleWord = SALE_WORDS.some(w => isWordInText(text, w));
   
-  // Маркеры "ещё", "еще" тоже через границу
-  const hasGenericMarker = /\b(?:ещё|еще|ещо|дополнительно)\b/i.test(text);
+  // Маркеры "ещё", "еще" — проверяем вхождение (без \b, он не работает с кириллицей)
+  const hasGenericMarker = /ещё|еще|ещо|дополнительно/i.test(text);
   
   // Есть ли число в тексте (от 2 цифр)
   const hasNumber = /\d{2,}/.test(text);
@@ -433,14 +441,17 @@ export function parseAddition(input: string): AdditionInfo | null {
   // "взял" не найдёт "взяли", "расход" не найдёт "расходку" и т.д.
   // extractDealAmount сам проверяет левую границу (чтобы не было "перерасход")
 
+  // ВАЖНО: БЕЗ \b! \b в JS не работает с кириллицей.
+  // extractDealAmount сам проверяет левую границу (чтобы не было "перерасход")
+  
   // Для дохода — полный список слов из INCOME_WORDS
-  const addSaleAmount = extractDealAmount(text, /\b(?:прода[жл]|продаж|сдал|реализова|заработал|добавил|получил|пришл[ои]|поступил|взял[и]?|поднял|увеличил|накинул|доплат|прибыл|выручк|аванс|доход|прибыль|заработан|навар|повысил|сверх|плюс|денег|предоплат)/);
+  const addSaleAmount = extractDealAmount(text, /(?:прода[жл]|продаж|сдал|реализова|заработал|добавил|получил|пришл[ои]|поступил|взял[и]?|поднял|увеличил|накинул|доплат|прибыл|выручк|аванс|доход|прибыль|заработан|навар|повысил|сверх|плюс|денег|предоплат)/);
   // Для работы
-  const addWorkAmount = extractDealAmount(text, /\b(?:монтаж|работа|услуг)/);
+  const addWorkAmount = extractDealAmount(text, /(?:монтаж|работа|услуг)/);
   // Для расходов — полный список слов из EXPENSE_WORDS
-  const addMaterialsAmount = extractDealAmount(text, /\b(?:расход|материал|расходк|расходн|комплектац|фреон|кронштейн|потратил|потрач|ушл[ои]|отдал|заплатил|снял|товар|затрат|издерж)/);
+  const addMaterialsAmount = extractDealAmount(text, /(?:расход|материал|расходк|расходн|комплектац|фреон|кронштейн|потратил|потрач|ушл[ои]|отдал|заплатил|снял|товар|затрат|издерж)/);
   // Для закупки
-  const addPurchaseAmount = extractDealAmount(text, /\b(?:купил|купили|закуп|закупил|покупк)/);
+  const addPurchaseAmount = extractDealAmount(text, /(?:купил|купили|закуп|закупил|покупк)/);
 
   // Fallback: если не нашли ни одной суммы, но есть число — пробуем просто взять число из текста
   let fallbackAmount = 0;
