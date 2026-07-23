@@ -267,14 +267,28 @@ function extractDealAmount(text: string, keywordRegex: RegExp): number {
     const afterKeyword = text.slice(keywordEnd, keywordEnd + 100);
     const beforeKeyword = text.slice(Math.max(0, match.index - 40), match.index);
 
-    const amountAfter = extractAmount(afterKeyword);
+    let amountAfter = extractAmount(afterKeyword);
+    // Эвристика: если число < 100 и это продажа/закупка — домножаем на 1000
+    // "купил за 30" = 30000, "продал за 40" = 40000
+    if (amountAfter > 0 && amountAfter < 100) {
+      const rawNum = afterKeyword.match(/\d+/);
+      if (rawNum && parseInt(rawNum[0]) < 100) {
+        amountAfter = parseInt(rawNum[0]) * 1000;
+      }
+    }
     if (amountAfter > 0) {
       totalAmount += amountAfter;
       regex.lastIndex = keywordEnd + afterKeyword.length;
       continue;
     }
 
-    const amountBefore = extractAmount(beforeKeyword);
+    let amountBefore = extractAmount(beforeKeyword);
+    if (amountBefore > 0 && amountBefore < 100) {
+      const rawNum = beforeKeyword.match(/\d+/);
+      if (rawNum && parseInt(rawNum[0]) < 100) {
+        amountBefore = parseInt(rawNum[0]) * 1000;
+      }
+    }
     if (amountBefore > 0) {
       totalAmount += amountBefore;
     }
