@@ -88,18 +88,15 @@ export async function GET() {
     logs.push("✅ allowed_users — OK");
 
     await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS access_tokens (
+      CREATE TABLE IF NOT EXISTS invite_codes (
         id SERIAL PRIMARY KEY,
-        token VARCHAR(20) NOT NULL UNIQUE,
-        creator_chat_id VARCHAR(100) NOT NULL DEFAULT '',
+        code VARCHAR(10) NOT NULL UNIQUE,
         label VARCHAR(255) DEFAULT '',
-        used BOOLEAN NOT NULL DEFAULT false,
-        used_by VARCHAR(255) DEFAULT '',
-        expires_at TIMESTAMP,
+        active BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-    logs.push("✅ access_tokens — OK");
+    logs.push("✅ invite_codes — OK");
 
     // Проверяем, что таблицы работают
     const tasksCount = await db.execute(sql`SELECT COUNT(*) as count FROM tasks`);
