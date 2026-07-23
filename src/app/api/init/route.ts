@@ -4,9 +4,11 @@ import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-// Эндпоинт для создания таблиц в базе данных.
+// Эндпоинт для создания и обновления таблиц в базе данных.
 // Откройте эту страницу один раз после развёртывания: /api/init
 export async function GET() {
+  const logs: string[] = [];
+  
   try {
     // Создаём таблицы, если их ещё нет
     await db.execute(sql`
@@ -17,6 +19,7 @@ export async function GET() {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
+    logs.push("✅ users — OK");
 
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS tasks (
@@ -29,6 +32,7 @@ export async function GET() {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
+    logs.push("✅ tasks — OK");
 
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS deals (
@@ -49,22 +53,45 @@ export async function GET() {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
+    logs.push("✅ deals — OK");
 
-    // Проверяем, что таблицы созданы
-    const tasks = await db.execute(sql`SELECT COUNT(*) as count FROM tasks`);
-    const deals = await db.execute(sql`SELECT COUNT(*) as count FROM deals`);
+    // Добавляем новые колонки через сырой SQL
+    try {
+      await db.execute(sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS deal_number INTEGER NOT NULL DEFAULT 0`);
+      logs.push(`✅ Колонка deal_number добавлена`);
+    } catch {
+      logs.push(`ℹ️ Колонка deal_number уже существует`);
+    }
+    try {
+      await db.execute(sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS activity_log TEXT NOT NULL DEFAULT '[]'`);
+      logs.push(`✅ Колонка activity_log добавлена`);
+    } catch {
+      logs.push(`ℹ️ Колонка activity_log уже существует`);
+    }
+
+    // Устанавливаем deal_number для старых записей, у которых его нет
+    await db.execute(sql`
+      UPDATE deals SET deal_number = id WHERE deal_number = 0 OR deal_number IS NULL
+    `);
+    logs.push("✅ Номера сделок установлены для старых записей");
+
+    // Проверяем, что таблицы работают
+    const tasksCount = await db.execute(sql`SELECT COUNT(*) as count FROM tasks`);
+    const dealsCount = await db.execute(sql`SELECT COUNT(*) as count FROM deals`);
 
     return NextResponse.json({
       success: true,
-      message: "✅ База данных инициализирована! Таблицы созданы.",
-      tasksCount: Number(tasks.rows[0].count),
-      dealsCount: Number(deals.rows[0].count),
+      message: "✅ База данных инициализирована! Таблицы и колонки обновлены.",
+      logs,
+      tasksCount: Number(tasksCount.rows[0].count),
+      dealsCount: Number(dealsCount.rows[0].count),
     });
   } catch (error: any) {
     return NextResponse.json(
       {
         success: false,
         message: "❌ Ошибка: " + error.message,
+        logs,
         hint: "Убедитесь, что DATABASE_URL правильно настроен в Vercel → Settings → Environment Variables",
       },
       { status: 500 }
