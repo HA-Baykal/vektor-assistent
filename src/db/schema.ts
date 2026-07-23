@@ -7,6 +7,7 @@ import {
   timestamp,
   date,
   time,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -30,7 +31,18 @@ export const allowedUsers = pgTable("allowed_users", {
   id: serial("id").primaryKey(),
   chatId: varchar("chat_id", { length: 100 }).notNull().unique(),
   userName: varchar("user_name", { length: 255 }).default(""),
-  accessLevel: varchar("access_level", { length: 20 }).notNull().default("read"), // "read" | "write" | "owner"
+  accessLevel: varchar("access_level", { length: 20 }).notNull().default("read"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const accessTokens = pgTable("access_tokens", {
+  id: serial("id").primaryKey(),
+  token: varchar("token", { length: 20 }).notNull().unique(),
+  creatorChatId: varchar("creator_chat_id", { length: 100 }).notNull().default(""),
+  label: varchar("label", { length: 255 }).default(""),
+  used: boolean("used").notNull().default(false),
+  usedBy: varchar("used_by", { length: 255 }).default(""),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

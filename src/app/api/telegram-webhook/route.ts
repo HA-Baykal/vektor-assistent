@@ -194,6 +194,85 @@ async function handleOwnerCommand(chatId: number, text: string, userName: string
     return true;
   }
 
+  // /token — сгенерировать одноразовый код для входа в веб-приложение
+  if (lower === "/token" || lower === "/токен") {
+    try {
+      const res = await fetch(`${APP_URL}/api/access-token/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creatorChatId: String(chatId), label: "telegram" }),
+      });
+
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+
+      await sendMessage(chatId,
+        `🔑 <b>Одноразовый код доступа</b>\n\n` +
+        `<code>${data.token}</code>\n\n` +
+        `Скажите этот код человеку, которому хотите дать доступ.\n` +
+        `Он должен открыть веб-приложение и ввести его.\n\n` +
+        `⏱ Истекает через 24 часа\n` +
+        `⚠️ Код можно использовать только ОДИН раз`
+      );
+    } catch {
+      await sendMessage(chatId, `❌ Ошибка при генерации кода.`);
+    }
+    return true;
+  }
+
+  // /tokens — список всех сгенерированных кодов
+  if (lower === "/tokens" || lower === "/токены") {
+    try {
+      const res = await fetch(`${APP_URL}/api/access-token/list?creatorChatId=${chatId}`);
+      if (!res.ok) throw new Error("API error");
+      const tokens = await res.json();
+
+      if (!tokens || tokens.length === 0) {
+        await sendMessage(chatId, `📭 Вы ещё не создавали коды доступа.\n\nСоздайте командой: /token`);
+      } else {
+        const list = tokens.slice(0, 10).map((t: any) => {
+          const status = t.used ? "✅ Использован" : "⏳ Ожидает";
+          const expires = t.expiresAt ? new Date(t.expiresAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Irkutsk" }) : "—";
+          return `• <code>${t.token}</code> — ${status} (до ${expires})`;
+        }).join("\n");
+
+        await sendMessage(chatId,
+          `🔑 <b>Коды доступа</b> (последние 10)\n\n${list}\n\n` +
+          `Чтобы создать новый: /token\n` +
+          `Чтобы отозвать: /revoketoken КОД`
+        );
+      }
+    } catch {
+      await sendMessage(chatId, `❌ Ошибка при получении списка.`);
+    }
+    return true;
+  }
+
+  // /revoketoken <code> — отозвать одноразовый код
+  if (lower.startsWith("/revoketoken") || lower.startsWith("/отозватьтокен")) {
+    const code = text.split(" ").slice(1).join(" ").trim().toUpperCase();
+    if (!code) {
+      await sendMessage(chatId, `❌ Укажите код: /revoketoken ABC123`);
+      return true;
+    }
+    try {
+      const res = await fetch(`${APP_URL}/api/access-token/revoke`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: code }),
+      });
+
+      if (res.ok) {
+        await sendMessage(chatId, `✅ Код ${code} отозван.`);
+      } else {
+        await sendMessage(chatId, `❌ Код ${code} не найден.`);
+      }
+    } catch {
+      await sendMessage(chatId, `❌ Ошибка.`);
+    }
+    return true;
+  }
+
   return false;
 }
 
@@ -353,6 +432,9 @@ export async function POST(request: Request) {
           `/newcode — новый код доступа`,
           `/users — список пользователей`,
           `/revoke ID — отозвать доступ`,
+          `/token — одноразовый код для входа в веб-приложение`,
+          `/tokens — список кодов`,
+          `/revoketoken КОД — отозвать код`,
         ].join("\n") + "\n\n" : "";
 
         await sendMessage(chatId,
