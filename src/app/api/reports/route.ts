@@ -5,7 +5,12 @@ import { gte, lte, and, eq, desc, type SQL, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-function getDateRange(period: string) {
+function getDateRange(period: string, customFrom?: string, customTo?: string) {
+  // Если кастомный период
+  if (customFrom && customTo) {
+    return { from: customFrom, to: customTo };
+  }
+
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let from: Date;
@@ -49,16 +54,18 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const period = searchParams.get("period") || "week";
   const category = searchParams.get("category") || "all";
+  const customFrom = searchParams.get("from") || undefined;
+  const customTo = searchParams.get("to") || undefined;
 
-  const { from, to } = getDateRange(period);
+  const { from, to } = getDateRange(period, customFrom, customTo);
 
-  let whereClause: SQL = sql`true`;
-  whereClause = and(whereClause, gte(deals.date, from), lte(deals.date, to)) as SQL;
+  // Сделки за период
+  let dealWhere: SQL = and(sql`true`, gte(deals.date, from), lte(deals.date, to)) as SQL;
   if (category !== "all") {
-    whereClause = and(whereClause, eq(deals.category, category)) as SQL;
+    dealWhere = and(dealWhere, eq(deals.category, category)) as SQL;
   }
 
-  const allDeals = await db.select().from(deals).where(whereClause).orderBy(desc(deals.date));
+  const allDeals = await db.select().from(deals).where(dealWhere).orderBy(desc(deals.date));
 
   const totalRevenue = allDeals.reduce((s, d) => s + d.saleAmount, 0);
   const totalPurchase = allDeals.reduce((s, d) => s + d.purchaseAmount, 0);
@@ -68,9 +75,10 @@ export async function GET(request: Request) {
   const totalEquipmentMargin = allDeals.reduce((s, d) => s + d.equipmentMargin, 0);
   const totalWorkMargin = allDeals.reduce((s, d) => s + d.workMargin, 0);
 
-  // По категориям (за весь период, без фильтра по категории)
-  let catWhereClause: SQL = and(sql`true`, gte(deals.date, from), lte(deals.date, to)) as SQL;
-  const allPeriodDeals = await db.select().from(deals).where(catWhereClause);
+  // По категориям
+  const allPeriodDeals = await db.select().from(deals).where(
+    and(sql`true`, gte(deals.date, from), lte(deals.date, to)) as SQL
+  );
 
   const byCategory: Record<string, { count: number; margin: number; revenue: number }> = {};
   for (const d of allPeriodDeals) {
@@ -82,12 +90,11 @@ export async function GET(request: Request) {
     byCategory[d.category].revenue += d.saleAmount;
   }
 
-  // Активные задачи
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const activeTasks = await db
+  // Задачи за период
+  const periodTasks = await db
     .select()
     .from(tasks)
-    .where(and(eq(tasks.status, "active"), gte(tasks.date, todayStr)) as SQL)
+    .where(and(gte(tasks.date, from), lte(tasks.date, to)) as SQL)
     .orderBy(tasks.date, tasks.time);
 
   return NextResponse.json({
@@ -106,6 +113,6 @@ export async function GET(request: Request) {
       totalMargin,
     },
     byCategory,
-    activeTasks,
+    tasks: periodTasks,
   });
 }

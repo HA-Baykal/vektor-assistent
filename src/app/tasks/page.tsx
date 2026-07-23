@@ -19,6 +19,11 @@ export default function TasksPage() {
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [showForm, setShowForm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [editTask, setEditTask] = useState<Task | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
+
   const [formDate, setFormDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
@@ -98,6 +103,29 @@ export default function TasksPage() {
     const idToDelete = deleteConfirm;
     setDeleteConfirm(null);
     await fetch(`/api/tasks?id=${idToDelete}`, { method: "DELETE" });
+    fetchTasks();
+  };
+
+  const openEdit = (task: Task) => {
+    setEditTask(task);
+    setEditText(task.text);
+    setEditDate(task.date);
+    setEditTime(task.time || "");
+  };
+
+  const saveEdit = async () => {
+    if (!editTask || !editText.trim()) return;
+    await fetch(`/api/tasks?id=${editTask.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editTask.id,
+        text: editText,
+        date: editDate,
+        time: editTime || null,
+      }),
+    });
+    setEditTask(null);
     fetchTasks();
   };
 
@@ -219,9 +247,7 @@ export default function TasksPage() {
           {sortedDates.length === 0 && (
             <div className="animate-fade-in-up rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
               <p className="text-4xl">📋</p>
-              <p className="mt-3 text-sm text-slate-400">
-                Задач пока нет
-              </p>
+              <p className="mt-3 text-sm text-slate-400">Задач пока нет</p>
               <p className="mt-1 text-xs text-slate-300">
                 Добавьте голосовым сообщением или через кнопку «Добавить»
               </p>
@@ -267,13 +293,11 @@ export default function TasksPage() {
                         )}
                       </button>
                       <div className="min-w-0 flex-1">
-                        <p
-                          className={`text-sm ${
-                            task.status === "done"
-                              ? "text-slate-400 line-through"
-                              : "text-slate-800"
-                          }`}
-                        >
+                        <p className={`text-sm ${
+                          task.status === "done"
+                            ? "text-slate-400 line-through"
+                            : "text-slate-800"
+                        }`}>
                           {task.text}
                         </p>
                       </div>
@@ -282,6 +306,13 @@ export default function TasksPage() {
                           {task.time}
                         </span>
                       )}
+                      <button
+                        onClick={() => openEdit(task)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition active:scale-90 hover:bg-indigo-50 hover:text-indigo-500"
+                        title="Редактировать"
+                      >
+                        ✏️
+                      </button>
                       <button
                         onClick={() => setDeleteConfirm(task.id)}
                         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition active:scale-90 hover:bg-red-50 hover:text-red-500"
@@ -293,6 +324,66 @@ export default function TasksPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editTask && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          onClick={() => setEditTask(null)}
+        >
+          <div
+            className="w-full max-w-md animate-fade-in-up rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-4 text-base font-bold text-slate-900">✏️ Редактировать задачу</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-400">Текст</label>
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  rows={2}
+                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="mb-1 block text-[11px] font-medium text-slate-400">Дата</label>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1 block text-[11px] font-medium text-slate-400">Время</label>
+                  <input
+                    type="time"
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={saveEdit}
+                  className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-md transition active:scale-95 hover:bg-indigo-700"
+                >
+                  💾 Сохранить
+                </button>
+                <button
+                  onClick={() => setEditTask(null)}
+                  className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-600 transition active:scale-95 hover:bg-slate-200"
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
