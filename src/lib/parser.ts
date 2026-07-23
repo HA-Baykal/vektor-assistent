@@ -190,7 +190,7 @@ export function parseInput(input: string): ParseResult {
   const text = input.trim();
   const lower = text.toLowerCase();
 
-  const hasFinancialKeywords = /продал|купил|закуп|монтаж|продаж|марж|прибыл|объект|работа|материал|комплектац|расход/.test(lower);
+  const hasFinancialKeywords = /продал|купил|закуп|монтаж|продаж|марж|прибыл|объект|работа|материал|комплектац|расход|потратил|потрач|заработал|добавил|получил|доплат|взял|доход|расходк|расходн/.test(lower);
 
   if (hasFinancialKeywords) {
     const deals = parseDeals(text);
@@ -310,12 +310,12 @@ function parseDeals(text: string): ParsedDeal[] {
   }
 
   for (const dealText of dealTexts) {
-    const saleAmount = extractDealAmount(dealText, /прода[жл]|продаж|прода/);
+    const saleAmount = extractDealAmount(dealText, /прода[жл]|продаж|прода|заработал|добавил|получил|взял|доплат|доход/);
     const purchaseAmount = extractDealAmount(dealText, /купил|закуп|закупил|купи/);
     const workAmount = extractDealAmount(dealText, /монтаж|работа|установк|оплат|монта/);
     const materialsAmount = extractDealAmount(
       dealText,
-      /материал|комплектац|фреон|кронштейн|расход|расходк|расходн/
+      /материал|комплектац|фреон|кронштейн|расход|расходк|расходн|потратил|потрач|затрат|ушл[ои]|отдал|заплатил|снял/
     );
 
     if (saleAmount > 0 || purchaseAmount > 0 || workAmount > 0 || materialsAmount > 0) {
@@ -427,8 +427,9 @@ export function parseAddition(input: string): AdditionInfo | null {
   // Есть ли число в тексте (от 2 цифр)
   const hasNumber = /\d{2,}/.test(text);
 
-  // Если нет вообще никаких маркеров и номера — пропускаем
-  if (!hasIncomeWord && !hasExpenseWord && !hasSaleWord && !hasGenericMarker && !dealNumber) return null;
+  // ВАЖНО: Если нет номера сделки — это не добавка, а новая сделка!
+  // parseAddition срабатывает ТОЛЬКО при явном указании номера
+  if (!dealNumber) return null;
 
   // Определяем тип: по умолчанию расход, если есть слово дохода — доход
   let additionType: AdditionType = "expense";

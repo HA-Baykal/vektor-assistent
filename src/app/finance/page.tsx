@@ -108,20 +108,11 @@ export default function FinancePage() {
       // Шаг 1: Проверяем, не "добавка" ли это к существующей сделке
       const addition = parseAddition(text);
       if (addition) {
-        let targetDeal: Deal | undefined;
+        if (!addition.dealNumber) return; // Без номера — не добавка
 
-        if (addition.dealNumber) {
-          targetDeal = deals.find(d => d.dealNumber === addition.dealNumber);
-          if (!targetDeal) {
-            showMessage(`❌ Сделка №${addition.dealNumber} не найдена. Проверьте номер.`, "error");
-            return;
-          }
-        } else if (deals.length > 0) {
-          targetDeal = deals[0];
-        }
-
+        const targetDeal = deals.find(d => d.dealNumber === addition.dealNumber);
         if (!targetDeal) {
-          showMessage("❌ Нет сделок для добавления. Сначала создайте сделку.", "error");
+          showMessage(`❌ Сделка №${addition.dealNumber} не найдена. Проверьте номер.`, "error");
           return;
         }
 
