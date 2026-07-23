@@ -28,10 +28,10 @@ export default function PinGuard({ children }: { children: ReactNode }) {
     if (!token.trim()) return;
 
     try {
-      const res = await fetch("/api/access-token", {
+      const res = await fetch("/api/invite-codes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: token.trim() }),
+        body: JSON.stringify({ code: token.trim() }),
       });
 
       if (res.ok) {

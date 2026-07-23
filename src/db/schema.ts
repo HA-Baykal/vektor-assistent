@@ -27,29 +27,10 @@ export const tasks = pgTable("tasks", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const allowedUsers = pgTable("allowed_users", {
-  id: serial("id").primaryKey(),
-  chatId: varchar("chat_id", { length: 100 }).notNull().unique(),
-  userName: varchar("user_name", { length: 255 }).default(""),
-  accessLevel: varchar("access_level", { length: 20 }).notNull().default("read"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export const accessTokens = pgTable("access_tokens", {
-  id: serial("id").primaryKey(),
-  token: varchar("token", { length: 20 }).notNull().unique(),
-  creatorChatId: varchar("creator_chat_id", { length: 100 }).notNull().default(""),
-  label: varchar("label", { length: 255 }).default(""),
-  used: boolean("used").notNull().default(false),
-  usedBy: varchar("used_by", { length: 255 }).default(""),
-  expiresAt: timestamp("expires_at"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
 export const deals = pgTable("deals", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().default(1),
-  dealNumber: integer("deal_number").notNull().default(0), // Серийный номер сделки
+  dealNumber: integer("deal_number").notNull().default(0),
   date: date("date").notNull(),
   category: varchar("category", { length: 50 }).notNull(),
   saleAmount: integer("sale_amount").notNull().default(0),
@@ -60,6 +41,24 @@ export const deals = pgTable("deals", {
   workMargin: integer("work_margin").notNull().default(0),
   totalMargin: integer("total_margin").notNull().default(0),
   notes: text("notes"),
-  activityLog: text("activity_log").notNull().default("[]"), // JSON-массив действий
+  activityLog: text("activity_log").notNull().default("[]"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Telegram пользователи
+export const allowedUsers = pgTable("allowed_users", {
+  id: serial("id").primaryKey(),
+  chatId: varchar("chat_id", { length: 100 }).notNull().unique(),
+  userName: varchar("user_name", { length: 255 }).default(""),
+  accessLevel: varchar("access_level", { length: 20 }).notNull().default("read"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Постоянные коды доступа к веб-приложению
+export const inviteCodes = pgTable("invite_codes", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 10 }).notNull().unique(),
+  label: varchar("label", { length: 255 }).default(""),
+  active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

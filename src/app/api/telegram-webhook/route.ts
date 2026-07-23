@@ -11,6 +11,15 @@ export const maxDuration = 30;
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://vektor-assistent.vercel.app";
 
+// Безопасная отправка — никогда не падает
+const safeSend = async (chatId: number | string, text: string, parseMode: "HTML" | "Markdown" = "HTML") => {
+  try {
+    await sendMessage(chatId, text, parseMode);
+  } catch {
+    // Игнорируем — токен может быть не установлен на Vercel
+  }
+};
+
 // ===== СИСТЕМА ДОСТУПА =====
 
 // ID владельца — задаётся через переменную окружения или первый пользователь бота
@@ -140,7 +149,7 @@ async function handleOwnerCommand(chatId: number, text: string, userName: string
 
   // /code — показать код доступа
   if (lower === "/code" || lower === "/код") {
-    await sendMessage(chatId,
+    await safeSend(chatId,
       `🔑 <b>Код доступа</b>\n\n` +
       `Текущий код: <code>${accessCode}</code>\n\n` +
       `Чтобы выдать доступ кому-то, скажите ему:\n` +
@@ -153,7 +162,7 @@ async function handleOwnerCommand(chatId: number, text: string, userName: string
   // /newcode — сгенерировать новый код
   if (lower === "/newcode" || lower === "/новыйкод") {
     accessCode = Math.random().toString(36).slice(2, 8).toUpperCase();
-    await sendMessage(chatId,
+    await safeSend(chatId,
       `🔑 <b>Новый код доступа</b>\n\n` +
       `Код: <code>${accessCode}</code>`
     );
@@ -165,15 +174,15 @@ async function handleOwnerCommand(chatId: number, text: string, userName: string
     try {
       const users = await db.select().from(allowedUsers);
       if (users.length === 0) {
-        await sendMessage(chatId, `📭 Нет пользователей с доступом.`);
+        await safeSend(chatId, `📭 Нет пользователей с доступом.`);
       } else {
         const list = users.map(u =>
           `• ${u.userName || "без имени"} (${u.chatId}) — <b>${u.accessLevel === "write" ? "✏️ запись" : u.accessLevel === "owner" ? "👑 владелец" : "👀 чтение"}</b>`
         ).join("\n");
-        await sendMessage(chatId, `👥 <b>Пользователи:</b>\n\n${list}`);
+        await safeSend(chatId, `👥 <b>Пользователи:</b>\n\n${list}`);
       }
     } catch {
-      await sendMessage(chatId, `❌ Ошибка при получении списка.`);
+      await safeSend(chatId, `❌ Ошибка при получении списка.`);
     }
     return true;
   }
@@ -182,93 +191,92 @@ async function handleOwnerCommand(chatId: number, text: string, userName: string
   if (lower.startsWith("/revoke") || lower.startsWith("/отозвать")) {
     const id = text.split(" ")[1];
     if (!id) {
-      await sendMessage(chatId, `❌ Укажите chat_id: /revoke 123456789`);
+      await safeSend(chatId, `❌ Укажите chat_id: /revoke 123456789`);
       return true;
     }
     try {
       await db.delete(allowedUsers).where(eq(allowedUsers.chatId, id));
-      await sendMessage(chatId, `✅ Доступ отозван у пользователя ${id}`);
+      await safeSend(chatId, `✅ Доступ отозван у пользователя ${id}`);
     } catch {
-      await sendMessage(chatId, `❌ Ошибка.`);
+      await safeSend(chatId, `❌ Ошибка.`);
     }
     return true;
   }
 
-  // /token — сгенерировать одноразовый код для входа в веб-приложение
+  // /token — сгенерировать новый код доступа (постоянный)
   if (lower === "/token" || lower === "/токен") {
     try {
-      const res = await fetch(`${APP_URL}/api/access-token/generate`, {
+      const res = await fetch(`${APP_URL}/api/invite-codes/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creatorChatId: String(chatId), label: "telegram" }),
+        body: JSON.stringify({}),
       });
 
       if (!res.ok) throw new Error("API error");
       const data = await res.json();
 
-      await sendMessage(chatId,
-        `🔑 <b>Одноразовый код доступа</b>\n\n` +
-        `<code>${data.token}</code>\n\n` +
-        `Скажите этот код человеку, которому хотите дать доступ.\n` +
-        `Он должен открыть веб-приложение и ввести его.\n\n` +
-        `⏱ Истекает через 24 часа\n` +
-        `⚠️ Код можно использовать только ОДИН раз`
+      await safeSend(chatId,
+        `🔑 <b>Новый код доступа</b>\n\n` +
+        `<code>${data.code}</code>\n\n` +
+        `Этот код даёт постоянный доступ к веб-приложению.\n` +
+        `Можно использовать с любого устройства.\n` +
+        `Действует пока вы не отзовёте его.\n\n` +
+        `Чтобы отозвать: /revokecode ${data.code}`
       );
     } catch {
-      await sendMessage(chatId, `❌ Ошибка при генерации кода.`);
+      await safeSend(chatId, `❌ Ошибка при генерации кода.`);
     }
     return true;
   }
 
-  // /tokens — список всех сгенерированных кодов
-  if (lower === "/tokens" || lower === "/токены") {
+  // /codes — список всех кодов
+  if (lower === "/codes" || lower === "/коды") {
     try {
-      const res = await fetch(`${APP_URL}/api/access-token/list?creatorChatId=${chatId}`);
+      const res = await fetch(`${APP_URL}/api/invite-codes/list`);
       if (!res.ok) throw new Error("API error");
-      const tokens = await res.json();
+      const codes = await res.json();
 
-      if (!tokens || tokens.length === 0) {
-        await sendMessage(chatId, `📭 Вы ещё не создавали коды доступа.\n\nСоздайте командой: /token`);
+      if (!codes || codes.length === 0) {
+        await safeSend(chatId, `📭 Нет кодов доступа.\n\nСоздайте: /token`);
       } else {
-        const list = tokens.slice(0, 10).map((t: any) => {
-          const status = t.used ? "✅ Использован" : "⏳ Ожидает";
-          const expires = t.expiresAt ? new Date(t.expiresAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Irkutsk" }) : "—";
-          return `• <code>${t.token}</code> — ${status} (до ${expires})`;
+        const list = codes.map((c: any) => {
+          const status = c.active ? "✅ Активен" : "❌ Отозван";
+          return `• <code>${c.code}</code> — ${status}`;
         }).join("\n");
 
-        await sendMessage(chatId,
-          `🔑 <b>Коды доступа</b> (последние 10)\n\n${list}\n\n` +
-          `Чтобы создать новый: /token\n` +
-          `Чтобы отозвать: /revoketoken КОД`
+        await safeSend(chatId,
+          `🔑 <b>Коды доступа</b>\n\n${list}\n\n` +
+          `Создать: /token\n` +
+          `Отозвать: /revokecode КОД`
         );
       }
     } catch {
-      await sendMessage(chatId, `❌ Ошибка при получении списка.`);
+      await safeSend(chatId, `❌ Ошибка при получении списка.`);
     }
     return true;
   }
 
-  // /revoketoken <code> — отозвать одноразовый код
-  if (lower.startsWith("/revoketoken") || lower.startsWith("/отозватьтокен")) {
+  // /revokecode <code> — отозвать код доступа
+  if (lower.startsWith("/revokecode") || lower.startsWith("/отозватькод")) {
     const code = text.split(" ").slice(1).join(" ").trim().toUpperCase();
     if (!code) {
-      await sendMessage(chatId, `❌ Укажите код: /revoketoken ABC123`);
+      await safeSend(chatId, `❌ Укажите код: /revokecode ABC123`);
       return true;
     }
     try {
-      const res = await fetch(`${APP_URL}/api/access-token/revoke`, {
+      const res = await fetch(`${APP_URL}/api/invite-codes/revoke`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: code }),
+        body: JSON.stringify({ code }),
       });
 
       if (res.ok) {
-        await sendMessage(chatId, `✅ Код ${code} отозван.`);
+        await safeSend(chatId, `✅ Код ${code} отозван. Больше никто не сможет им воспользоваться.`);
       } else {
-        await sendMessage(chatId, `❌ Код ${code} не найден.`);
+        await safeSend(chatId, `❌ Код ${code} не найден.`);
       }
     } catch {
-      await sendMessage(chatId, `❌ Ошибка.`);
+      await safeSend(chatId, `❌ Ошибка.`);
     }
     return true;
   }
@@ -290,6 +298,8 @@ type TelegramUpdate = {
 };
 
 export async function POST(request: Request) {
+  // ВАЖНО: Всегда возвращаем 200, чтобы Telegram не дублировал сообщения
+  // Даже если токен не настроен на Vercel — не падаем
   try {
     const update: TelegramUpdate = await request.json();
     const msg = update.message;
@@ -302,6 +312,15 @@ export async function POST(request: Request) {
     const text = msg.text.trim();
     const userName = msg.from?.first_name || msg.from?.username || "Пользователь";
 
+    // Обёртка для sendMessage, которая никогда не падает
+    const safeSend = async (id: number, txt: string, mode: "HTML" | "Markdown" = "HTML") => {
+      try {
+        await safeSend(id, txt, mode);
+      } catch {
+        // Игнорируем — токен может быть не на Vercel
+      }
+    };
+
     // ===== ПРОВЕРКА ДОСТУПА =====
     const userLevel = await getUserLevel(chatId);
 
@@ -311,7 +330,7 @@ export async function POST(request: Request) {
       if (!OWNER_ID_ENV && ownerChatId === null) {
         ownerChatId = chatId;
         await setUserAccess(chatId, "owner", userName);
-        await sendMessage(chatId,
+        await safeSend(chatId,
           `👑 <b>Вы назначены владельцем!</b>\n\n` +
           `У вас полный доступ к управлению сделками и задачами.\n\n` +
           `📱 <a href="${APP_URL}">Открыть веб-приложение</a>\n\n` +
@@ -326,13 +345,13 @@ export async function POST(request: Request) {
         const code = text.split(" ").slice(1).join(" ").trim().toUpperCase();
         if (code === accessCode) {
           await setUserAccess(chatId, "write", userName);
-          await sendMessage(chatId,
+          await safeSend(chatId,
             `✅ <b>Доступ предоставлен!</b>\n\n` +
             `Теперь вы можете создавать и редактировать сделки.\n\n` +
             `Напишите /help для списка команд.`
           );
         } else {
-          await sendMessage(chatId,
+          await safeSend(chatId,
             `❌ <b>Неверный код доступа.</b>\n\n` +
             `Попросите владельца отправить вам новый код командой /code`
           );
@@ -344,7 +363,7 @@ export async function POST(request: Request) {
       if (text.startsWith("/")) {
         const cmd = text.split(" ")[0].toLowerCase();
         if (cmd === "/start") {
-          await sendMessage(chatId,
+          await safeSend(chatId,
             `👋 <b>Вектор Ассистент</b>\n\n` +
             `Этот бот помогает вести учёт сделок и задач.\n\n` +
             `🔒 <b>У вас режим «только чтение»</b>\n` +
@@ -363,27 +382,27 @@ export async function POST(request: Request) {
           if (cmd === "/last") {
             const lastDeal = await getLastDeal();
             if (lastDeal) {
-              await sendMessage(chatId, `👀 <b>Просмотр:</b>\n\n${formatDealInfo(lastDeal)}`);
+              await safeSend(chatId, `👀 <b>Просмотр:</b>\n\n${formatDealInfo(lastDeal)}`);
             } else {
-              await sendMessage(chatId, "📭 Сделок пока нет.");
+              await safeSend(chatId, "📭 Сделок пока нет.");
             }
           } else {
             const num = parseInt(text.split(" ")[1]);
             if (isNaN(num)) {
-              await sendMessage(chatId, "❌ Укажите номер: /deal 10");
+              await safeSend(chatId, "❌ Укажите номер: /deal 10");
             } else {
               const deal = await getDealByNumber(num);
               if (deal) {
-                await sendMessage(chatId, `👀 <b>Просмотр:</b>\n\n${formatDealInfo(deal)}`);
+                await safeSend(chatId, `👀 <b>Просмотр:</b>\n\n${formatDealInfo(deal)}`);
               } else {
-                await sendMessage(chatId, `❌ Сделка №${num} не найдена.`);
+                await safeSend(chatId, `❌ Сделка №${num} не найдена.`);
               }
             }
           }
           return NextResponse.json({ ok: true });
         }
         if (cmd === "/help") {
-          await sendMessage(chatId,
+          await safeSend(chatId,
             `📖 <b>Команды для чтения:</b>\n\n` +
             `/last — последняя сделка\n` +
             `/deal № — сделка по номеру\n` +
@@ -394,7 +413,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ ok: true });
         }
         // Любая другая команда — игнорируем
-        await sendMessage(chatId,
+        await safeSend(chatId,
           `🔒 <b>У вас режим «только чтение»</b>\n\n` +
           `Вы можете только просматривать сделки:\n` +
           `/last — последняя сделка\n` +
@@ -405,7 +424,7 @@ export async function POST(request: Request) {
       }
 
       // Неизвестный пользователь пишет текст — игнорируем
-      await sendMessage(chatId,
+      await safeSend(chatId,
         `🔒 <b>У вас нет доступа к редактированию.</b>\n\n` +
         `Чтобы получить доступ, нужен код от владельца.\n` +
         `Отправьте: /access ВАШ_КОД\n\n` +
@@ -437,7 +456,7 @@ export async function POST(request: Request) {
           `/revoketoken КОД — отозвать код`,
         ].join("\n") + "\n\n" : "";
 
-        await sendMessage(chatId,
+        await safeSend(chatId,
           canWrite
             ? `🎯 <b>Как пользоваться ботом</b>\n\n` +
               `📝 <b>Новая сделка:</b>\n` +
@@ -467,9 +486,9 @@ export async function POST(request: Request) {
       if (cmd === "/last") {
         const lastDeal = await getLastDeal();
         if (lastDeal) {
-          await sendMessage(chatId, formatDealInfo(lastDeal));
+          await safeSend(chatId, formatDealInfo(lastDeal));
         } else {
-          await sendMessage(chatId, "📭 У вас пока нет сделок.");
+          await safeSend(chatId, "📭 У вас пока нет сделок.");
         }
         return NextResponse.json({ ok: true });
       }
@@ -477,13 +496,13 @@ export async function POST(request: Request) {
       if (cmd === "/deal") {
         const num = parseInt(text.split(" ")[1]);
         if (isNaN(num)) {
-          await sendMessage(chatId, "❌ Укажите номер: /deal 10");
+          await safeSend(chatId, "❌ Укажите номер: /deal 10");
         } else {
           const deal = await getDealByNumber(num);
           if (deal) {
-            await sendMessage(chatId, formatDealInfo(deal));
+            await safeSend(chatId, formatDealInfo(deal));
           } else {
-            await sendMessage(chatId, `❌ Сделка №${num} не найдена.`);
+            await safeSend(chatId, `❌ Сделка №${num} не найдена.`);
           }
         }
         return NextResponse.json({ ok: true });
@@ -496,14 +515,14 @@ export async function POST(request: Request) {
       }
 
       // Неизвестная команда
-      await sendMessage(chatId, `❌ Неизвестная команда. Напишите /help`);
+      await safeSend(chatId, `❌ Неизвестная команда. Напишите /help`);
       return NextResponse.json({ ok: true });
     }
 
     // ===== ТЕКСТОВЫЕ СООБЩЕНИЯ =====
     // Если есть доступ на чтение, но нет на запись — блокируем
     if (!canWrite) {
-      await sendMessage(chatId,
+      await safeSend(chatId,
         `🔒 <b>У вас режим «только чтение»</b>\n\n` +
         `Вы можете просматривать сделки:\n` +
         `/last — последняя сделка\n` +
@@ -522,20 +541,20 @@ export async function POST(request: Request) {
       if (addition.dealNumber) {
         targetDeal = await getDealByNumber(addition.dealNumber);
         if (!targetDeal) {
-          await sendMessage(chatId, `❌ Сделка №${addition.dealNumber} не найдена.`);
+          await safeSend(chatId, `❌ Сделка №${addition.dealNumber} не найдена.`);
           return NextResponse.json({ ok: true });
         }
       } else {
         targetDeal = await getLastDeal();
         if (!targetDeal) {
-          await sendMessage(chatId, `❌ Нет сделок. Сначала создайте сделку.`);
+          await safeSend(chatId, `❌ Нет сделок. Сначала создайте сделку.`);
           return NextResponse.json({ ok: true });
         }
       }
 
       const updated = await addToDeal(targetDeal.id, addition);
       if (!updated) {
-        await sendMessage(chatId, "❌ Ошибка при обновлении.");
+        await safeSend(chatId, "❌ Ошибка при обновлении.");
         return NextResponse.json({ ok: true });
       }
 
@@ -546,7 +565,7 @@ export async function POST(request: Request) {
       if (addition.addMaterialsAmount > 0) labels.push(`${formatRub(addition.addMaterialsAmount)} на расходку (расход)`);
       if (addition.addPurchaseAmount > 0) labels.push(`${formatRub(addition.addPurchaseAmount)} на закупку (расход)`);
 
-      await sendMessage(chatId,
+      await safeSend(chatId,
         `${emoji} <b>Сделка №${updated.dealNumber} • ${updated.category}</b>\n` +
         `${labels.join("\n")}\n\n` +
         `<b>💰 Маржа: ${updated.totalMargin >= 0 ? "+" : ""}${formatRub(updated.totalMargin)}</b>`
@@ -563,20 +582,20 @@ export async function POST(request: Request) {
         const list = result.deals.map((d: any) =>
           `№${d.dealNumber} • ${d.category} • Маржа: ${d.totalMargin >= 0 ? "+" : ""}${formatRub(d.totalMargin)}`
         ).join("\n");
-        await sendMessage(chatId, `✅ <b>Создано ${result.deals.length} сделок(и)</b>\n\n${list}\n\n<b>💰 Итого маржа: ${formatRub(total)}</b>`);
+        await safeSend(chatId, `✅ <b>Создано ${result.deals.length} сделок(и)</b>\n\n${list}\n\n<b>💰 Итого маржа: ${formatRub(total)}</b>`);
       } else {
-        await sendMessage(chatId, "❌ Не удалось создать сделку.");
+        await safeSend(chatId, "❌ Не удалось создать сделку.");
       }
     } else if (parsed.type === "tasks" && parsed.tasks.length > 0) {
       const result = await createTask(text);
       if (result?.tasks) {
         const list = result.tasks.map((t: any) => `${t.date} ${t.time || ""} — ${t.text}`).join("\n");
-        await sendMessage(chatId, `✅ <b>Создано ${result.tasks.length} задач(и)</b>\n\n${list}`);
+        await safeSend(chatId, `✅ <b>Создано ${result.tasks.length} задач(и)</b>\n\n${list}`);
       } else {
-        await sendMessage(chatId, "❌ Не удалось создать задачу.");
+        await safeSend(chatId, "❌ Не удалось создать задачу.");
       }
     } else {
-      await sendMessage(chatId,
+      await safeSend(chatId,
         `🤔 Не удалось распознать.\n\nПопробуйте:\n` +
         `• «Продал кондиционер за 40 тысяч, купил за 30»\n` +
         `• «Доход 10000 сделка 10»\n` +
