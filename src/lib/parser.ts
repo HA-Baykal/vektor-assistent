@@ -416,20 +416,15 @@ export function parseAddition(input: string): AdditionInfo | null {
     dealNumber = parseInt(dealNumMatch[1]);
   }
 
-  // Проверяем слова с границами — каждое слово должно быть отдельным
-  const hasIncomeWord = INCOME_WORDS.some(w => isWordInText(text, w));
-  const hasExpenseWord = EXPENSE_WORDS.some(w => isWordInText(text, w));
-  const hasSaleWord = SALE_WORDS.some(w => isWordInText(text, w));
-  
-  // Маркеры "ещё", "еще" — проверяем вхождение (без \b, он не работает с кириллицей)
-  const hasGenericMarker = /ещё|еще|ещо|дополнительно/i.test(text);
-  
-  // Есть ли число в тексте (от 2 цифр)
-  const hasNumber = /\d{2,}/.test(text);
-
   // ВАЖНО: Если нет номера сделки — это не добавка, а новая сделка!
   // parseAddition срабатывает ТОЛЬКО при явном указании номера
   if (!dealNumber) return null;
+
+  // Определяем тип добавки по ключевым словам
+  const hasIncomeWord = INCOME_WORDS.some(w => isWordInText(text, w));
+  const hasExpenseWord = EXPENSE_WORDS.some(w => isWordInText(text, w));
+  const hasSaleWord = SALE_WORDS.some(w => isWordInText(text, w));
+  const hasGenericMarker = /ещё|еще|ещо|дополнительно/i.test(text);
 
   // Определяем тип: по умолчанию расход, если есть слово дохода — доход
   let additionType: AdditionType = "expense";

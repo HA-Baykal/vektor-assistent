@@ -535,20 +535,12 @@ export async function POST(request: Request) {
     // Шаг 1: Проверяем добавку к сделке
     const addition = parseAddition(text);
     if (addition) {
-      let targetDeal: any = null;
+      if (!addition.dealNumber) return NextResponse.json({ ok: true }); // Без номера — не добавка
 
-      if (addition.dealNumber) {
-        targetDeal = await getDealByNumber(addition.dealNumber);
-        if (!targetDeal) {
-          await safeSend(chatId, `❌ Сделка №${addition.dealNumber} не найдена.`);
-          return NextResponse.json({ ok: true });
-        }
-      } else {
-        targetDeal = await getLastDeal();
-        if (!targetDeal) {
-          await safeSend(chatId, `❌ Нет сделок. Сначала создайте сделку.`);
-          return NextResponse.json({ ok: true });
-        }
+      const targetDeal = await getDealByNumber(addition.dealNumber);
+      if (!targetDeal) {
+        await safeSend(chatId, `❌ Сделка №${addition.dealNumber} не найдена.`);
+        return NextResponse.json({ ok: true });
       }
 
       const updated = await addToDeal(targetDeal.id, addition);
