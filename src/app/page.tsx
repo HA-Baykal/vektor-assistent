@@ -93,7 +93,6 @@ export default function HomePage() {
           </div>
           <VoiceInput
             onResult={async (text) => {
-              // Просто передаём текст — API обработает
               try {
                 const parsedRes = await fetch("/api/parse", {
                   method: "POST",
@@ -114,7 +113,6 @@ export default function HomePage() {
                     body: JSON.stringify({ text }),
                   });
                 }
-                // Обновляем страницу
                 window.location.reload();
               } catch {
                 // игнорируем
@@ -128,10 +126,18 @@ export default function HomePage() {
         <div className="animate-fade-in-up rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
           <p className="text-3xl mb-2">⚠️</p>
           <p className="text-sm font-medium text-amber-800">
-            {error || "Загрузка данных..."}
+            Не удалось загрузить данные
           </p>
           <p className="mt-1 text-xs text-amber-600">
-            Данные скоро появятся. Вы можете продолжать пользоваться голосовым вводом.
+            Нажмите «Обновить» или откройте{" "}
+            <a 
+              href="/api/init" 
+              target="_blank"
+              className="font-semibold text-amber-700 underline hover:text-amber-800"
+            >
+              /api/init
+            </a>
+            {" "}один раз для обновления базы данных, затем вернитесь и обновите страницу.
           </p>
           <button
             onClick={() => window.location.reload()}
