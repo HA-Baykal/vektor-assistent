@@ -3,6 +3,7 @@
 import { useState } from "react";
 import VoiceInput from "@/components/VoiceInput";
 import { formatRub, formatDateRu } from "@/lib/parser";
+import { useIrkutskTime } from "@/lib/time";
 
 type Task = {
   id: number;
@@ -49,6 +50,7 @@ export default function DashboardClient({
   const [tasks, setTasks] = useState<Task[]>(todayTasks);
   const [deals, setDeals] = useState<Deal[]>(todayDeals);
   const [message, setMessage] = useState("");
+  const timeInfo = useIrkutskTime();
 
   const handleVoiceResult = async (text: string) => {
     try {
@@ -128,11 +130,13 @@ export default function DashboardClient({
       {/* Header */}
       <div className="animate-fade-in-up">
         <h1 className="text-xl font-bold text-slate-900 md:text-2xl">
-          Доброе утро! 👋
+          {timeInfo.greeting}! {timeInfo.emoji}
         </h1>
-        <p className="mt-0.5 text-xs text-slate-500 md:text-sm">
-          Сегодня {todayLabel}, {weekday}
-        </p>
+        <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 md:text-sm">
+          <span>Сегодня {todayLabel}, {weekday}</span>
+          <span className="h-3 w-px bg-slate-200" />
+          <span className="font-medium text-indigo-500">{timeInfo.timeStr} (Ирк)</span>
+        </div>
       </div>
 
       {/* Voice input */}
@@ -154,7 +158,7 @@ export default function DashboardClient({
         )}
       </div>
 
-      {/* Stats — на мобилке 2 колонки, на десктопе 4 */}
+      {/* Stats */}
       <div className="animate-fade-in-up grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4" style={{ animationDelay: "0.1s" }}>
         <StatCard
           label="Маржа за неделю"

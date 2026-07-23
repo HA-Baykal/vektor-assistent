@@ -1,5 +1,152 @@
 @import "tailwindcss";
 
+/* ========== ТЁМНАЯ ТЕМА (вечер по Иркутску) ========== */
+.dark body {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+.dark .card {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.dark .card-header {
+  color: #f1f5f9;
+}
+
+.dark .card-text {
+  color: #94a3b8;
+}
+
+.dark .stat-value {
+  color: #f1f5f9;
+}
+
+.dark .stat-label {
+  color: #64748b;
+}
+
+/* Стили для тёмной темы на основные элементы */
+.dark .bg-white {
+  background-color: #1e293b !important;
+}
+
+.dark .border-slate-100,
+.dark .border-slate-200 {
+  border-color: #334155 !important;
+}
+
+.dark .text-slate-900 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-slate-800 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-slate-700 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-600 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-500 {
+  color: #64748b !important;
+}
+
+.dark .text-slate-400 {
+  color: #475569 !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #0f172a !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+.dark .shadow-sm {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Мобильный топбар в тёмной теме */
+.dark header {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  border-bottom-color: rgba(51, 65, 85, 0.5) !important;
+}
+
+.dark header .text-slate-900 {
+  color: #f1f5f9 !important;
+}
+
+.dark header .bg-emerald-50 {
+  background-color: rgba(5, 150, 105, 0.15) !important;
+}
+
+.dark header .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+/* Мобильная нижняя навигация в тёмной теме */
+.dark .bottom-nav {
+  background-color: rgba(15, 23, 42, 0.95) !important;
+  border-top-color: rgba(51, 65, 85, 0.5) !important;
+}
+
+.dark .bottom-nav a {
+  color: #475569 !important;
+}
+
+.dark .bottom-nav a.text-indigo-600 {
+  color: #818cf8 !important;
+}
+
+/* Индикатор "Работает" */
+.dark .bg-emerald-50 {
+  background-color: rgba(5, 150, 105, 0.15) !important;
+}
+
+.dark .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+.dark .bg-indigo-50 {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+.dark .text-indigo-600 {
+  color: #818cf8 !important;
+}
+
+.dark .bg-emerald-500 {
+  background-color: #059669 !important;
+}
+
+/* Таски и карточки */
+.dark .hover\:border-indigo-200:hover {
+  border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+/* Модальные окна в тёмной теме */
+.dark .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Кнопки в тёмной теме */
+.dark button.bg-slate-100 {
+  background-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+.dark button.text-slate-600 {
+  color: #94a3b8 !important;
+}
+
 /* ========== МОБИЛЬНАЯ АДАПТАЦИЯ ========== */
 
 /* Safe area для iPhone с notch/home indicator */
@@ -44,54 +191,33 @@ html {
   button, a, [role="button"] {
     cursor: default;
   }
-  /* Увеличиваем touch-область для маленьких кнопок */
   .touch-target {
     min-height: 44px;
     min-width: 44px;
   }
 }
 
-/* Анимации для появления элементов */
+/* Анимации */
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 .animate-fade-in-up {
   animation: fadeInUp 0.3s ease-out forwards;
 }
 
 @keyframes slideUp {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
-
 .animate-slide-up {
   animation: slideUp 0.3s ease-out;
 }
 
-/* Мигающий индикатор записи */
 @keyframes pulse-dot {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.3);
-  }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
 }
-
 .animate-pulse-dot {
   animation: pulse-dot 1s ease-in-out infinite;
 }

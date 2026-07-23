@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import VoiceInput from "@/components/VoiceInput";
 import { formatRub, formatDateRu } from "@/lib/parser";
+import { useIrkutskTime } from "@/lib/time";
 import DashboardClient from "./DashboardClient";
 
 type Task = {
@@ -38,6 +39,7 @@ type DashboardData = {
 
 export default function HomePage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const timeInfo = useIrkutskTime();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -72,15 +74,19 @@ export default function HomePage() {
         {/* Header */}
         <div>
           <h1 className="text-xl font-bold text-slate-900 md:text-2xl">
-            Доброе утро! 👋
+            {timeInfo.greeting}! {timeInfo.emoji}
           </h1>
-          <p className="mt-0.5 text-xs text-slate-500 md:text-sm">
-            {new Date().toLocaleDateString("ru-RU", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
+          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 md:text-sm">
+            <span>
+              {new Date().toLocaleDateString("ru-RU", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </span>
+            <span className="h-3 w-px bg-slate-200" />
+            <span className="font-medium text-indigo-500">{timeInfo.timeStr} (Ирк)</span>
+          </div>
         </div>
 
         {/* Voice input */}
