@@ -53,6 +53,7 @@ export default function FinancePage() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [logExpanded, setLogExpanded] = useState(false);
   const [editForm, setEditForm] = useState({
     saleAmount: "",
     purchaseAmount: "",
@@ -106,18 +107,15 @@ export default function FinancePage() {
       // Шаг 1: Проверяем, не "добавка" ли это к существующей сделке
       const addition = parseAddition(text);
       if (addition) {
-        // Определяем, к какой сделке добавлять
         let targetDeal: Deal | undefined;
 
         if (addition.dealNumber) {
-          // Ищем по номеру сделки
           targetDeal = deals.find(d => d.dealNumber === addition.dealNumber);
           if (!targetDeal) {
             showMessage(`❌ Сделка №${addition.dealNumber} не найдена. Проверьте номер.`, "error");
             return;
           }
         } else if (deals.length > 0) {
-          // Берём последнюю сделку
           targetDeal = deals[0];
         }
 
@@ -127,18 +125,22 @@ export default function FinancePage() {
         }
 
         const labels: string[] = [];
-        if (addition.addMaterialsAmount > 0) labels.push(`${formatRub(addition.addMaterialsAmount)} на расходку`);
-        if (addition.addPurchaseAmount > 0) labels.push(`${formatRub(addition.addPurchaseAmount)} на закупку`);
-        if (addition.addWorkAmount > 0) labels.push(`${formatRub(addition.addWorkAmount)} на монтаж`);
+        const emoji = addition.additionType === "income" ? "💰" : "💸";
+        const typeLabel = addition.additionType === "income" ? "доход" : "расход";
+        if (addition.addSaleAmount > 0) labels.push(`${formatRub(addition.addSaleAmount)} к продаже (${typeLabel})`);
+        if (addition.addWorkAmount > 0) labels.push(`${formatRub(addition.addWorkAmount)} за работы (${typeLabel})`);
+        if (addition.addMaterialsAmount > 0) labels.push(`${formatRub(addition.addMaterialsAmount)} на расходку (${typeLabel})`);
+        if (addition.addPurchaseAmount > 0) labels.push(`${formatRub(addition.addPurchaseAmount)} на закупку (${typeLabel})`);
 
         const res = await fetch("/api/deals", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: targetDeal.id,
+            addSaleAmount: addition.addSaleAmount,
+            addWorkAmount: addition.addWorkAmount,
             addMaterialsAmount: addition.addMaterialsAmount,
             addPurchaseAmount: addition.addPurchaseAmount,
-            addWorkAmount: addition.addWorkAmount,
           }),
         });
 
@@ -146,7 +148,7 @@ export default function FinancePage() {
         const updated = await res.json();
 
         showMessage(
-          `✅ Сделка №${updated.dealNumber} «${updated.category}»:\n${labels.join("\n")}\n💰 Новая маржа: ${formatRub(updated.totalMargin)}`
+          `${emoji} Сделка №${updated.dealNumber} «${updated.category}»:\n${labels.join("\n")}\n💰 Новая маржа: ${formatRub(updated.totalMargin)}`
         );
         fetchDeals();
         return;
@@ -232,6 +234,34 @@ export default function FinancePage() {
     }
   };
 
+  const handleAddToDeal = async (field: string, label: string, emoji: string) => {
+    if (!selectedDeal) return;
+    const extra = prompt(`${emoji} Сколько ${label}? (₽)`);
+    if (!extra) return;
+    const amount = parseInt(extra);
+    if (!amount || amount <= 0) {
+      showMessage("❌ Введите корректную сумму", "error");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/deals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedDeal.id, [field]: amount }),
+      });
+
+      if (!res.ok) throw new Error("Ошибка");
+
+      const updated = await res.json();
+      setSelectedDeal(updated);
+      showMessage(`✅ ${emoji} Добавлено ${formatRub(amount)}. Маржа пересчитана`);
+      fetchDeals();
+    } catch {
+      showMessage("❌ Ошибка при обновлении", "error");
+    }
+  };
+
   const handleAddExpense = async (field: "addMaterialsAmount" | "addPurchaseAmount" | "addWorkAmount") => {
     if (!selectedDeal) return;
     const label = field === "addMaterialsAmount" ? "расходные материалы" : field === "addPurchaseAmount" ? "закупку" : "монтаж";
@@ -313,7 +343,7 @@ export default function FinancePage() {
         </div>
         <VoiceInput
           onResult={handleVoiceResult}
-          placeholder='Например: "Продал кондиционер..." или "Ещё расходка 2500 сделка 34"'
+          placeholder='Например: "Продал кондиционер..." или "Номер 10 потратил ещё 2500" или "Заработал ещё 5000 сделка 34"'
         />
         {message && (
           <div className={`mt-3 whitespace-pre-line rounded-xl p-3 text-xs leading-relaxed md:text-sm ${
@@ -760,30 +790,48 @@ export default function FinancePage() {
                     </div>
                   </div>
 
-                  {/* Кнопки быстрого добавления расходов */}
+                  {/* Кнопки быстрого добавления */}
                   <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 md:p-4">
                     <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:text-xs">
-                      ➕ Добавить расход
+                      ⚡ Быстрое добавление
                     </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        onClick={() => handleAddExpense("addMaterialsAmount")}
-                        className="rounded-lg bg-amber-100 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition active:scale-95 hover:bg-amber-200"
-                      >
-                        + Расходные материалы
-                      </button>
-                      <button
-                        onClick={() => handleAddExpense("addPurchaseAmount")}
-                        className="rounded-lg bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 transition active:scale-95 hover:bg-red-200"
-                      >
-                        + Закупка
-                      </button>
-                      <button
-                        onClick={() => handleAddExpense("addWorkAmount")}
-                        className="rounded-lg bg-blue-100 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition active:scale-95 hover:bg-blue-200"
-                      >
-                        + Монтаж
-                      </button>
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-medium text-emerald-600 md:text-[10px]">💰 ДОХОД (увеличивает маржу)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          onClick={() => handleAddToDeal("addSaleAmount", "добавили к продаже", "💰")}
+                          className="rounded-lg bg-emerald-100 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition active:scale-95 hover:bg-emerald-200"
+                        >
+                          + Продажа
+                        </button>
+                        <button
+                          onClick={() => handleAddToDeal("addWorkAmount", "добавили за работу", "💰")}
+                          className="rounded-lg bg-emerald-100 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition active:scale-95 hover:bg-emerald-200"
+                        >
+                          + Работа/монтаж
+                        </button>
+                      </div>
+                      <p className="text-[9px] font-medium text-red-600 md:text-[10px]">💸 РАСХОД (уменьшает маржу)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          onClick={() => handleAddExpense("addMaterialsAmount")}
+                          className="rounded-lg bg-amber-100 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition active:scale-95 hover:bg-amber-200"
+                        >
+                          + Расходные материалы
+                        </button>
+                        <button
+                          onClick={() => handleAddExpense("addPurchaseAmount")}
+                          className="rounded-lg bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 transition active:scale-95 hover:bg-red-200"
+                        >
+                          + Закупка
+                        </button>
+                        <button
+                          onClick={() => handleAddExpense("addWorkAmount")}
+                          className="rounded-lg bg-blue-100 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition active:scale-95 hover:bg-blue-200"
+                        >
+                          + Монтаж (расход)
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -812,61 +860,99 @@ export default function FinancePage() {
                     </div>
                   )}
 
-                  {/* 📋 Лог действий */}
+                  {/* 📋 Лог действий (сворачиваемый) */}
                   {(() => {
                     try {
                       const log: ActivityEntry[] = JSON.parse(selectedDeal.activityLog || "[]");
                       if (log.length === 0) return null;
+                      const lastEntry = log[log.length - 1];
+                      const firstEntry = log[0];
                       return (
-                        <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm md:p-4">
-                          <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400 md:text-xs">
-                            📋 История действий
-                          </p>
-                          <div className="space-y-2">
-                            {log.map((entry, idx) => (
-                              <div key={idx} className="flex gap-2">
-                                {/* Таймлайн */}
-                                <div className="flex flex-col items-center">
-                                  <div className={`h-2 w-2 rounded-full ${
-                                    entry.action.includes("Сделка создана") ? "bg-indigo-500" :
-                                    entry.action.includes("Маржа") ? "bg-emerald-500" :
-                                    entry.action.includes("➕") ? "bg-blue-500" :
-                                    "bg-slate-300"
-                                  }`} />
-                                  {idx < log.length - 1 && <div className="mt-0.5 h-full w-px bg-slate-200" />}
-                                </div>
-                                {/* Контент */}
-                                                <div className="flex-1 pb-2">
-                                                  <div className="flex items-center justify-between">
-                                                    <p className="text-[11px] font-semibold text-slate-700 md:text-xs">
-                                                      {entry.action}
-                                                    </p>
-                                                    <span className="text-[9px] text-slate-400 md:text-[10px]">{entry.timestamp?.slice(11, 16) || ""}</span>
-                                                  </div>
-                                                  <p className="mt-0.5 text-[10px] text-slate-500 md:text-[11px]">{entry.details}</p>
-                                                  {entry.delta && (entry.delta.materialsAmount || entry.delta.purchaseAmount || entry.delta.workAmount) && (
-                                                    <p className="text-[9px] font-medium text-blue-600 md:text-[10px]">
-                                                      Изменение расходов: {entry.delta.materialsAmount ? `+${formatRub(entry.delta.materialsAmount)} ` : ""}{entry.delta.purchaseAmount ? `+${formatRub(entry.delta.purchaseAmount)} ` : ""}{entry.delta.workAmount ? `+${formatRub(entry.delta.workAmount)}` : ""}
-                                                    </p>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                          {/* Итог в логе */}
-                                          {log.length > 1 && (
-                                            <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                                              <span className="text-[10px] font-semibold text-slate-500">Всего операций:</span>
-                                              <span className="text-[10px] font-bold text-slate-700">{log.length}</span>
-                                            </div>
-                                          )}
+                        <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
+                          {/* Заголовок-переключатель */}
+                          <button
+                            onClick={() => setLogExpanded(!logExpanded)}
+                            className="flex w-full items-center justify-between p-3 text-left transition hover:bg-slate-50 md:p-4"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">📋</span>
+                              <div>
+                                <p className="text-[11px] font-semibold text-slate-700 md:text-xs">История сделки</p>
+                                <p className="text-[9px] text-slate-400 md:text-[10px]">
+                                  {log.length} {log.length === 1 ? "запись" : log.length < 5 ? "записи" : "записей"} · Последняя: {lastEntry.timestamp?.slice(11, 16) || ""}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-semibold text-indigo-600 md:text-[10px]">
+                                {log.length}
+                              </span>
+                              <svg
+                                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                                className={`text-slate-400 transition-transform ${logExpanded ? "rotate-180" : ""}`}
+                              >
+                                <polyline points="6 9 12 15 18 9" />
+                              </svg>
+                            </div>
+                          </button>
+
+                          {/* Раскрывающийся лог */}
+                          {logExpanded && (
+                            <div className="space-y-0 border-t border-slate-100 px-3 pb-3 pt-2 md:px-4 md:pb-4">
+                              {log.map((entry, idx) => {
+                                // Определяем иконку и цвет
+                                let icon = "📝";
+                                let dotColor = "bg-slate-300";
+                                if (entry.action.includes("Сделка создана")) { icon = "🆕"; dotColor = "bg-indigo-500"; }
+                                else if (entry.action.includes("Маржа")) { icon = "📊"; dotColor = "bg-emerald-500"; }
+                                else if (entry.action.includes("➕") || entry.action.includes("Добавлено")) {
+                                  if (entry.action.includes("продаж") || entry.action.includes("доход")) { icon = "💰"; dotColor = "bg-emerald-500"; }
+                                  else { icon = "💸"; dotColor = "bg-red-400"; }
+                                }
+                                else if (entry.action.includes("изменен")) { icon = "✏️"; dotColor = "bg-amber-400"; }
+
+                                return (
+                                  <div key={idx} className="flex gap-2.5">
+                                    <div className="flex flex-col items-center pt-0.5">
+                                      <div className={`flex h-5 w-5 items-center justify-center rounded-full ${dotColor} text-[9px] text-white`}>
+                                        {icon === "🆕" ? "" : icon === "📊" ? "" : icon === "💰" ? "" : icon === "💸" ? "" : icon === "✏️" ? "" : ""}
+                                      </div>
+                                      {idx < log.length - 1 && <div className="mt-0.5 h-full w-px bg-slate-100" />}
+                                    </div>
+                                    <div className={`flex-1 pb-3 ${idx === log.length - 1 ? "" : ""}`}>
+                                      <div className="flex items-center justify-between">
+                                        <p className="text-[11px] font-semibold text-slate-700 md:text-xs">{entry.action}</p>
+                                        <span className="text-[9px] text-slate-400 md:text-[10px]">{entry.timestamp?.slice(11, 16) || ""}</span>
+                                      </div>
+                                      <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500 md:text-[11px]">{entry.details}</p>
+                                      {entry.delta && Object.values(entry.delta).some(v => v && v !== 0) && (
+                                        <div className="mt-1 flex flex-wrap gap-1">
+                                          {entry.delta.saleAmount ? <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600">Продажа: +{formatRub(entry.delta.saleAmount)}</span> : null}
+                                          {entry.delta.workAmount ? <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600">Работа: +{formatRub(entry.delta.workAmount)}</span> : null}
+                                          {entry.delta.materialsAmount ? <span className="rounded-md bg-red-50 px-1.5 py-0.5 text-[9px] font-medium text-red-600">Расход: +{formatRub(entry.delta.materialsAmount)}</span> : null}
+                                          {entry.delta.purchaseAmount ? <span className="rounded-md bg-red-50 px-1.5 py-0.5 text-[9px] font-medium text-red-600">Закупка: +{formatRub(entry.delta.purchaseAmount)}</span> : null}
                                         </div>
-                                      );
-                                    } catch {
-                                      return null;
-                                    }
-                                  })()}
-                                </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {/* Итоговая строка */}
+                              <div className="mt-1 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                                <span className="text-[10px] font-medium text-slate-500">💰 Текущая маржа:</span>
+                                <span className={`text-[11px] font-bold ${selectedDeal.totalMargin >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                                  {selectedDeal.totalMargin >= 0 ? "+" : ""}{formatRub(selectedDeal.totalMargin)}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    } catch {
+                      return null;
+                    }
+                  })()}
+                </div>
 
                 {/* Действия */}
                 <div className="mt-4 flex flex-wrap gap-2 md:mt-5 md:gap-3">

@@ -385,70 +385,143 @@ export function formatWeekdayRu(dateStr: string): string {
   return days[d.getDay()];
 }
 
-// Проверяет, является ли текст "добавкой" к существующей сделке (слова "ещё", "добавить", "дополнительно")
-// Возвращает поле, к которому нужно добавить, и сумму
+// Определяет тип добавки: расход или доход
+// "потратил ещё 2500" → РАСХОД (materials)
+// "добавил ещё 5000" → ДОХОД (sale)
+// "заработал ещё 3000" → ДОХОД (sale)
+export type AdditionType = "expense" | "income" | "expense_purchase" | "income_work";
+
 export type AdditionInfo = {
   type: "addition";
-  addMaterialsAmount: number;
-  addPurchaseAmount: number;
-  addWorkAmount: number;
-  dealNumber?: number; // Номер сделки, к которой добавляем (если указан)
+  additionType: AdditionType; // что именно добавляем
+  addSaleAmount: number;     // доход (продажа)
+  addWorkAmount: number;     // доход (работа/монтаж)
+  addMaterialsAmount: number; // расход (материалы/расходка)
+  addPurchaseAmount: number;  // расход (закупка)
+  dealNumber?: number;
   rawText: string;
 };
+
+// Универсальные русские слова для всех случаев
+const INCOME_WORDS = [
+  "заработал", "заработали", "заработано",
+  "добавил", "добавили", "добавлено",
+  "получил", "получили", "получено",
+  "пришло", "пришли", "поступило", "поступили",
+  "доплата", "доплатили", "доплачено",
+  "навар", "прибыль",
+  "подняли", "повысили", "увеличили",
+  "взяли", "взял", "берём", "возьмём",
+  "оплатили", "оплачено", "оплата",
+  "переплата", "переплатили",
+  "накинули", "накинем",
+  "сверх", "сверху", "дополнительно",
+  "плюс", "плюсом",
+  "денег", "деньги",
+  "доход", "дохода",
+  "выручка",
+  "калькуляция",
+  "аванс", "предоплата",
+];
+
+const EXPENSE_WORDS = [
+  "потратил", "потратили", "потрачено", "потрач",
+  "расход", "расходы", "расходка", "расходн",
+  "затратил", "затратили", "затраты",
+  "ушло", "ушли",
+  "отдал", "отдали",
+  "заплатил", "заплатили",
+  "оплатил", "оплатили", "оплачено",
+  "издержки",
+  "сняли", "снял",
+  "покупка", "купил", "купили", "закупил", "закупили", "закуп",
+  "материал", "материалы", "комплектация", "комплектуха",
+  "фреон", "кронштейн", "кронштейны",
+  "товар", "товары",
+];
+
+const SALE_WORDS = ["продал", "продажа", "сдали", "сдать", "реализовали", "реализация"];
 
 export function parseAddition(input: string): AdditionInfo | null {
   const text = input.trim().toLowerCase();
 
-  // Извлекаем номер сделки: "номер 10", "сделка 34", "сд 34", "№12"
-  const dealNumMatch = text.match(/(?:сделк[а-я]+\s*(?:№|#|номер|)?|объект\s+(?:№|#|номер|)?|(?:№|#|номер))\s*(\d+)/i);
+  // Извлекаем номер сделки: поддержка всех форматов
+  const dealNumMatch = text.match(
+    /(?:сделк[а-я]+\s*(?:№|#|номер|)?|объект\s*(?:№|#|номер|)?|номер[а-я]*\s*(?:№|#|)?|(?:№|#))\s*(\d+)/i
+  );
   let dealNumber: number | undefined;
   if (dealNumMatch) {
     dealNumber = parseInt(dealNumMatch[1]);
   }
 
-  // Проверяем маркеры добавления — если есть номер сделки, "ещё" не обязательно
-  const hasExplicitMarker = /\b(?:ещё|еще|добав|дополнительно|ещо|доп|потратил|потрач|ещо)\b/i.test(text);
-  if (!hasExplicitMarker && !dealNumber) return null;
+  // Проверяем — есть ли хоть одно слово-маркер (доход, расход или просто "ещё")
+  const hasIncomeWord = INCOME_WORDS.some(w => text.includes(w));
+  const hasExpenseWord = EXPENSE_WORDS.some(w => text.includes(w));
+  const hasSaleWord = SALE_WORDS.some(w => text.includes(w));
+  const hasGenericMarker = /\b(?:ещё|еще|ещо|доп|дополнительно|ещё|еще)\b/i.test(text);
+  const hasNumber = /\d{2,}/.test(text);
 
-  // Проверяем: есть ли финансовая информация или сумма
-  const hasFinancial = /расход|материал|расходк|комплектац|фреон|кронштейн|закуп|купил|монтаж|работ|потратил|потрач|объект|\d{2,}/.test(text);
+  // Если нет ни маркера, ни номера сделки — не добавка
+  if (!hasIncomeWord && !hasExpenseWord && !hasSaleWord && !hasGenericMarker && !dealNumber) return null;
+  // Если нет номера сделки и нет маркера (но есть цифры) — тоже не добавка
+  if (!dealNumber && !hasIncomeWord && !hasExpenseWord && !hasSaleWord && !hasGenericMarker) return null;
 
-  // Ищем суммы для каждого типа
-  const addMaterialsAmount = extractDealAmount(text, /расход|материал|расходк|комплектац|фреон|кронштейн|расходн/);
-  const addPurchaseAmount = extractDealAmount(text, /купил|закуп|закупил|купи/);
-  const addWorkAmount = extractDealAmount(text, /монтаж|работа|установк|оплат|монта/);
+  const hasFinancialInfo = hasIncomeWord || hasExpenseWord || hasSaleWord || hasGenericMarker || hasNumber;
 
-  // Fallback: если не нашли по ключевым словам, но есть номер сделки — ищем любое число в тексте
+  // Определяем тип добавки по ключевым словам
+  // По умолчанию — расходы (самое частое)
+  let additionType: AdditionType = "expense";
+
+  // Если есть явное слово дохода — это доход
+  if (hasIncomeWord || hasSaleWord) {
+    additionType = "income";
+  }
+  // Слова "купил/закуп/материал" явно указывают на расход
+  if (hasExpenseWord && !hasIncomeWord && !hasSaleWord) {
+    additionType = "expense";
+  }
+  // Если только generic маркер "ещё" + номер — это расход (по умолчанию)
+  if (hasGenericMarker && !hasIncomeWord && !hasExpenseWord && !hasSaleWord) {
+    additionType = "expense";
+  }
+
+  // Извлекаем суммы для разных типов
+  const addMaterialsAmount = extractDealAmount(text, /расход|материал|расходк|расходн|комплектац|фреон|кронштейн|потратил|потрач|ушло|отдал|заплатил|издержк|снял|товар/);
+  const addPurchaseAmount = extractDealAmount(text, /купил|купили|закуп|закупил|покупк/);
+  const addSaleAmount = extractDealAmount(text, /продал|продаж|сдал|реализова|заработал|добавил|получил|пришло|поступил|взял|взяли|поднял|увеличил|накинул|доплат|прибыл|выручк|аванс/);
+  const addWorkAmount = extractDealAmount(text, /монтаж|работа|установк|оплат|монта|услуг/);
+
+  // Fallback: если не нашли ни одной суммы, но есть номер сделки
   let fallbackAmount = 0;
-  if (!addMaterialsAmount && !addPurchaseAmount && !addWorkAmount && dealNumber && hasFinancial) {
+  if (!addMaterialsAmount && !addPurchaseAmount && !addSaleAmount && !addWorkAmount) {
     const nums = text.match(/\d+/g);
     if (nums) {
-      const filtered = nums.map(Number).filter(n => n !== dealNumber && n > 0);
+      let filtered = nums.map(Number).filter(n => n > 0);
+      if (dealNumber) filtered = filtered.filter(n => n !== dealNumber);
       if (filtered.length > 0) {
         fallbackAmount = filtered[0];
-        if (fallbackAmount < 100 && fallbackAmount >= 1) fallbackAmount *= 1000;
+        if (fallbackAmount < 100) fallbackAmount *= 1000;
+      }
+    }
+    // Если всё ещё нет — последняя попытка, просто первое число
+    if (!fallbackAmount && nums) {
+      const n = parseInt(nums[0]);
+      if (n > 0 && n !== dealNumber) {
+        fallbackAmount = n < 100 ? n * 1000 : n;
       }
     }
   }
 
-  // Второй fallback: если есть "ещё"/"потратил" и число (без номера сделки)
-  if (!addMaterialsAmount && !addPurchaseAmount && !addWorkAmount && !fallbackAmount && hasExplicitMarker) {
-    const nums = text.match(/\d+/g);
-    if (nums) {
-      const num = parseInt(nums[0]);
-      if (num > 0) {
-        fallbackAmount = num < 100 ? num * 1000 : num;
-      }
-    }
-  }
-
-  if (!addMaterialsAmount && !addPurchaseAmount && !addWorkAmount && !fallbackAmount) return null;
+  const hasAnyAmount = !!(addMaterialsAmount || addPurchaseAmount || addSaleAmount || addWorkAmount || fallbackAmount);
+  if (!hasAnyAmount) return null;
 
   return {
     type: "addition",
-    addMaterialsAmount: addMaterialsAmount || (fallbackAmount > 0 ? fallbackAmount : 0),
-    addPurchaseAmount: addPurchaseAmount || 0,
+    additionType,
+    addSaleAmount: addSaleAmount || (additionType === "income" && fallbackAmount ? fallbackAmount : 0),
     addWorkAmount: addWorkAmount || 0,
+    addMaterialsAmount: addMaterialsAmount || (additionType === "expense" && !addSaleAmount ? fallbackAmount : 0),
+    addPurchaseAmount: addPurchaseAmount || 0,
     dealNumber,
     rawText: input,
   };
