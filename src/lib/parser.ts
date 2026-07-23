@@ -174,6 +174,111 @@ export function extractAmount(text: string): number {
   return 0;
 }
 
+// Конвертирует числа прописью в цифры в тексте
+// "завтра в девять утра" → "завтра в 9 утра"
+// "двадцать пять тысяч" → "25000"
+const NUMBER_WORDS: Record<string, string> = {
+  "ноль": "0", "один": "1", "одна": "1", "два": "2", "две": "2",
+  "три": "3", "четыре": "4", "пять": "5", "шесть": "6",
+  "семь": "7", "восемь": "8", "девять": "9", "десять": "10",
+  "одиннадцать": "11", "двенадцать": "12", "тринадцать": "13",
+  "четырнадцать": "14", "пятнадцать": "15", "шестнадцать": "16",
+  "семнадцать": "17", "восемнадцать": "18", "девятнадцать": "19",
+  "двадцать": "20", "тридцать": "30", "сорок": "40",
+  "пятьдесят": "50", "шестьдесят": "60", "семьдесят": "70",
+  "восемьдесят": "80", "девяносто": "90",
+  "сто": "100", "двести": "200", "триста": "300",
+  "четыреста": "400", "пятьсот": "500",
+  "шестьсот": "600", "семьсот": "700",
+  "восемьсот": "800", "девятьсот": "900",
+  "тысяча": "1000", "тысячи": "1000", "тысяч": "1000", "тысячу": "1000",
+};
+
+export function convertNumberWords(text: string): string {
+  const lower = text.toLowerCase();
+  let result = text;
+  let changed = false;
+
+  // ВАЖНО: НЕ используем \b! Он не работает с кириллицей в JavaScript.
+  // Используем ручную проверку границ.
+  
+  function replaceWord(input: string, word: string, replacement: string): string {
+    const idx = input.toLowerCase().indexOf(word.toLowerCase());
+    if (idx === -1) return input;
+    // Проверяем границы слова
+    if (idx > 0 && /[а-яёa-z0-9]/.test(input[idx - 1])) return input;
+    const afterIdx = idx + word.length;
+    if (afterIdx < input.length && /[а-яёa-z0-9]/.test(input[afterIdx])) return input;
+    return input.slice(0, idx) + replacement + input.slice(afterIdx);
+  }
+
+  // 1. Составные числа: "двадцать пять" → 25
+  const compoundPairs = [
+    ["двадцать ", "один"], ["двадцать ", "два"], ["двадцать ", "три"], ["двадцать ", "четыре"],
+    ["двадцать ", "пять"], ["двадцать ", "шесть"], ["двадцать ", "семь"], ["двадцать ", "восемь"], ["двадцать ", "девять"],
+    ["тридцать ", "один"], ["тридцать ", "два"], ["тридцать ", "три"], ["тридцать ", "четыре"],
+    ["тридцать ", "пять"], ["тридцать ", "шесть"], ["тридцать ", "семь"], ["тридцать ", "восемь"], ["тридцать ", "девять"],
+    ["сорок ", "один"], ["сорок ", "два"], ["сорок ", "три"], ["сорок ", "четыре"],
+    ["сорок ", "пять"], ["сорок ", "шесть"], ["сорок ", "семь"], ["сорок ", "восемь"], ["сорок ", "девять"],
+    ["пятьдесят ", "один"], ["пятьдесят ", "два"], ["пятьдесят ", "три"], ["пятьдесят ", "четыре"],
+    ["пятьдесят ", "пять"], ["пятьдесят ", "шесть"], ["пятьдесят ", "семь"], ["пятьдесят ", "восемь"], ["пятьдесят ", "девять"],
+    ["шестьдесят ", "один"], ["шестьдесят ", "два"], ["шестьдесят ", "три"], ["шестьдесят ", "четыре"],
+    ["шестьдесят ", "пять"], ["шестьдесят ", "шесть"], ["шестьдесят ", "семь"], ["шестьдесят ", "восемь"], ["шестьдесят ", "девять"],
+    ["семьдесят ", "один"], ["семьдесят ", "два"], ["семьдесят ", "три"], ["семьдесят ", "четыре"],
+    ["семьдесят ", "пять"], ["семьдесят ", "шесть"], ["семьдесят ", "семь"], ["семьдесят ", "восемь"], ["семьдесят ", "девять"],
+    ["восемьдесят ", "один"], ["восемьдесят ", "два"], ["восемьдесят ", "три"], ["восемьдесят ", "четыре"],
+    ["восемьдесят ", "пять"], ["восемьдесят ", "шесть"], ["восемьдесят ", "семь"], ["восемьдесят ", "восемь"], ["восемьдесят ", "девять"],
+    ["девяносто ", "один"], ["девяносто ", "два"], ["девяносто ", "три"], ["девяносто ", "четыре"],
+    ["девяносто ", "пять"], ["девяносто ", "шесть"], ["девяносто ", "семь"], ["девяносто ", "восемь"], ["девяносто ", "девять"],
+  ];
+  
+  for (const [tens, ones] of compoundPairs) {
+    const tensVal = parseInt(NUMBER_WORDS[tens.trim()]);
+    const onesVal = parseInt(NUMBER_WORDS[ones]);
+    const replacement = String(tensVal + onesVal);
+    const searchStr = tens + ones;
+    const idx = result.toLowerCase().indexOf(searchStr);
+    if (idx !== -1) {
+      // Проверяем границы
+      if ((idx === 0 || !/[а-яёa-z0-9]/.test(result[idx - 1])) &&
+          (idx + searchStr.length >= result.length || !/[а-яёa-z0-9]/.test(result[idx + searchStr.length]))) {
+        result = result.slice(0, idx) + replacement + result.slice(idx + searchStr.length);
+        changed = true;
+      }
+    }
+  }
+
+  // 2. Простые числа по одному слову
+  // Сортируем от самых длинных к коротким, чтобы "одиннадцать" заменилось до "один"
+  const sortedWords = Object.entries(NUMBER_WORDS).sort((a, b) => b[0].length - a[0].length);
+  
+  // Пропускаем простые числа 1-9 (они обрабатываются отдельно ниже)
+  const skipWords = new Set(["один","одна","два","две","три","четыре","пять","шесть","семь","восемь","девять"]);
+  
+  for (const [word, numStr] of sortedWords) {
+    // Составные уже обработаны
+    if (skipWords.has(word)) continue;
+    const newResult = replaceWord(result, word, numStr);
+    if (newResult !== result) {
+      result = newResult;
+      changed = true;
+    }
+  }
+  
+  // 3. Простые числа 1-9 (только если не часть составного)
+  const simpleOnes = [["один","1"],["одна","1"],["два","2"],["две","2"],["три","3"],
+    ["четыре","4"],["пять","5"],["шесть","6"],["семь","7"],["восемь","8"],["девять","9"]];
+  for (const [word, numStr] of simpleOnes) {
+    const newResult = replaceWord(result, word, numStr);
+    if (newResult !== result) {
+      result = newResult;
+      changed = true;
+    }
+  }
+
+  return result;
+}
+
 // Определяет категорию сделки
 export function detectCategory(text: string): string {
   const lower = text.toLowerCase();
@@ -187,7 +292,8 @@ export function detectCategory(text: string): string {
 
 // Главная функция парсинга
 export function parseInput(input: string): ParseResult {
-  const text = input.trim();
+  // Сначала конвертируем числа прописью в цифры
+  const text = convertNumberWords(input.trim());
   const lower = text.toLowerCase();
 
   const hasFinancialKeywords = /продал|купил|закуп|монтаж|продаж|марж|прибыл|объект|работа|материал|комплектац|расход|потратил|потрач|заработал|добавил|получил|доплат|взял|доход|расходк|расходн/.test(lower);
@@ -208,7 +314,8 @@ export function parseInput(input: string): ParseResult {
 }
 
 // Парсит задачи из текста
-function parseTasks(text: string): ParsedTask[] {
+function parseTasks(inputText: string): ParsedTask[] {
+  const text = convertNumberWords(inputText);
   const tasks: ParsedTask[] = [];
   const baseDate = new Date();
 
@@ -298,7 +405,8 @@ function extractDealAmount(text: string, keywordRegex: RegExp): number {
 }
 
 // Парсит финансовые сделки
-function parseDeals(text: string): ParsedDeal[] {
+function parseDeals(inputText: string): ParsedDeal[] {
+  const text = convertNumberWords(inputText);
   const deals: ParsedDeal[] = [];
   const baseDate = new Date();
   const date = extractDate(text, baseDate);
@@ -418,7 +526,9 @@ function isWordInText(text: string, word: string): boolean {
 }
 
 export function parseAddition(input: string): AdditionInfo | null {
-  const text = input.trim().toLowerCase();
+  // Конвертируем числа прописью в цифры для правильного распознавания
+  const normalized = convertNumberWords(input.trim());
+  const text = normalized.toLowerCase();
   if (!text) return null;
 
   // Извлекаем номер сделки
