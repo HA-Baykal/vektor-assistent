@@ -2,22 +2,34 @@
 
 import { useState, useEffect, type ReactNode } from "react";
 
-const TOKEN_KEY = "vektor_token_verified";
+const SESSION_KEY = "vektor_token_verified";
+const LOCAL_KEY = "vektor_token_remembered";
 
 export default function PinGuard({ children }: { children: ReactNode }) {
   const [token, setToken] = useState("");
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(true);
   const [unlocked, setUnlocked] = useState(false);
+  const [remember, setRemember] = useState(false);
 
   useEffect(() => {
-    // Проверяем sessionStorage
-    const saved = sessionStorage.getItem(TOKEN_KEY);
-    if (saved === "true") {
+    // Проверяем сначала sessionStorage (текущая вкладка)
+    const sessionSaved = sessionStorage.getItem(SESSION_KEY);
+    if (sessionSaved === "true") {
       setUnlocked(true);
       setChecking(false);
       return;
     }
+
+    // Потом localStorage (запомненное устройство)
+    const localSaved = localStorage.getItem(LOCAL_KEY);
+    if (localSaved === "true") {
+      sessionStorage.setItem(SESSION_KEY, "true");
+      setUnlocked(true);
+      setChecking(false);
+      return;
+    }
+
     setChecking(false);
   }, []);
 
@@ -35,7 +47,14 @@ export default function PinGuard({ children }: { children: ReactNode }) {
       });
 
       if (res.ok) {
-        sessionStorage.setItem(TOKEN_KEY, "true");
+        // Всегда сохраняем в sessionStorage (до закрытия вкладки)
+        sessionStorage.setItem(SESSION_KEY, "true");
+
+        // Если отмечено "Запомнить" — сохраняем в localStorage (навсегда)
+        if (remember) {
+          localStorage.setItem(LOCAL_KEY, "true");
+        }
+
         setUnlocked(true);
       } else {
         const data = await res.json();
@@ -46,6 +65,9 @@ export default function PinGuard({ children }: { children: ReactNode }) {
       setError("Ошибка соединения");
     }
   };
+
+  // Удалить сохранение (на будущее — кнопка "Выйти")
+  // const logout = () => { sessionStorage.removeItem(SESSION_KEY); localStorage.removeItem(LOCAL_KEY); setUnlocked(false); };
 
   if (checking) {
     return (
@@ -66,7 +88,7 @@ export default function PinGuard({ children }: { children: ReactNode }) {
             </div>
             <h1 className="text-xl font-bold text-white">Вектор Ассистент</h1>
             <p className="mt-1 text-sm text-slate-400">
-              Введите одноразовый код доступа
+              Введите код доступа
             </p>
           </div>
 
@@ -89,6 +111,21 @@ export default function PinGuard({ children }: { children: ReactNode }) {
                 </p>
               )}
             </div>
+
+            {/* Чекбокс "Запомнить устройство" */}
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-700/50 bg-slate-800/50 px-4 py-3 transition hover:border-slate-600 hover:bg-slate-800">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-700 text-indigo-500 outline-none transition focus:ring-2 focus:ring-indigo-500/30"
+              />
+              <div>
+                <span className="text-sm font-medium text-slate-200">Запомнить устройство</span>
+                <p className="text-[10px] text-slate-500">Больше не нужно будет вводить код на этом устройстве</p>
+              </div>
+            </label>
+
             <button
               type="submit"
               disabled={!token.trim()}
