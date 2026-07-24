@@ -40,6 +40,9 @@ export const deals = pgTable("deals", {
   equipmentMargin: integer("equipment_margin").notNull().default(0),
   workMargin: integer("work_margin").notNull().default(0),
   totalMargin: integer("total_margin").notNull().default(0),
+  paymentType: varchar("payment_type", { length: 20 }).notNull().default("cash"), // "cash" | "invoice"
+  taxAmount: integer("tax_amount").notNull().default(0),
+  totalWithTax: integer("total_with_tax").notNull().default(0),
   notes: text("notes"),
   activityLog: text("activity_log").notNull().default("[]"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

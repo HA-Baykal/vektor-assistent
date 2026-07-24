@@ -28,6 +28,9 @@ type Deal = {
   equipmentMargin: number;
   workMargin: number;
   totalMargin: number;
+  paymentType: string;
+  taxAmount: number;
+  totalWithTax: number;
   notes: string | null;
   activityLog: string;
   createdAt: string;
@@ -60,6 +63,7 @@ export default function FinancePage() {
     purchaseAmount: "",
     workAmount: "",
     materialsAmount: "",
+    paymentType: "cash",
     notes: "",
   });
 
@@ -72,6 +76,7 @@ export default function FinancePage() {
       purchaseAmount: String(deal.purchaseAmount),
       workAmount: String(deal.workAmount),
       materialsAmount: String(deal.materialsAmount),
+      paymentType: deal.paymentType || "cash",
       notes: deal.notes || "",
     });
   };
@@ -83,6 +88,7 @@ export default function FinancePage() {
     purchaseAmount: "",
     workAmount: "",
     materialsAmount: "",
+    paymentType: "cash",
     notes: "",
   });
 
@@ -175,6 +181,7 @@ export default function FinancePage() {
       purchaseAmount: parseInt(form.purchaseAmount) || 0,
       workAmount: parseInt(form.workAmount) || 0,
       materialsAmount: parseInt(form.materialsAmount) || 0,
+      paymentType: form.paymentType,
       notes: form.notes || null,
     };
     await fetch("/api/deals", {
@@ -189,6 +196,7 @@ export default function FinancePage() {
       purchaseAmount: "",
       workAmount: "",
       materialsAmount: "",
+      paymentType: "cash",
       notes: "",
     });
     setShowForm(false);
@@ -205,6 +213,7 @@ export default function FinancePage() {
         purchaseAmount: parseInt(editForm.purchaseAmount) || 0,
         workAmount: parseInt(editForm.workAmount) || 0,
         materialsAmount: parseInt(editForm.materialsAmount) || 0,
+        paymentType: editForm.paymentType || "cash",
         notes: editForm.notes || null,
       };
 
@@ -464,6 +473,42 @@ export default function FinancePage() {
               </div>
             </div>
 
+            {/* Способ оплаты */}
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-slate-400">Способ оплаты</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, paymentType: "cash" })}
+                  className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition active:scale-95 ${
+                    form.paymentType === "cash"
+                      ? "bg-emerald-500 text-white shadow-md"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  💵 Наличные
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, paymentType: "invoice" })}
+                  className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition active:scale-95 ${
+                    form.paymentType === "invoice"
+                      ? "bg-indigo-500 text-white shadow-md"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  📄 По счёту (−6%)
+                </button>
+              </div>
+              {form.paymentType === "invoice" && (
+                <div className="mt-1.5 rounded-lg bg-indigo-50 px-3 py-1.5">
+                  <p className="text-[10px] text-indigo-600">
+                    🛈 С общей суммы дохода будет удержан налог 6%
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="mb-1 block text-[11px] font-medium text-slate-400">Заметки</label>
               <input
@@ -475,24 +520,33 @@ export default function FinancePage() {
               />
             </div>
 
-            {/* Предпросмотр маржи */}
+            {/* Предпросмотр маржи с учётом налога */}
             {(() => {
               const s = parseInt(form.saleAmount) || 0;
               const p = parseInt(form.purchaseAmount) || 0;
               const w = parseInt(form.workAmount) || 0;
               const m = parseInt(form.materialsAmount) || 0;
-              const margin = s - p + w - m;
+              const tax = form.paymentType === "invoice" ? Math.round((s + w) * 0.06) : 0;
+              const margin = s - p + w - m - tax;
               return (
                 <div className={`rounded-xl p-3 md:p-4 ${
                   margin >= 0 ? "bg-emerald-50" : "bg-red-50"
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700 md:text-sm">Предварительная маржа:</span>
-                    <span className={`text-base font-bold md:text-lg ${
-                      margin >= 0 ? "text-emerald-600" : "text-red-600"
-                    }`}>
-                      {formatRub(margin)}
-                    </span>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-700 md:text-sm">Предварительная маржа:</span>
+                      <span className={`text-base font-bold md:text-lg ${
+                        margin >= 0 ? "text-emerald-600" : "text-red-600"
+                      }`}>
+                        {formatRub(margin)}
+                      </span>
+                    </div>
+                    {tax > 0 && (
+                      <div className="flex items-center justify-between text-[10px] text-amber-600">
+                        <span>🗂 Налог 6%</span>
+                        <span>−{formatRub(tax)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -551,6 +605,9 @@ export default function FinancePage() {
                       {deal.category}
                     </span>
                     <span className="text-[11px] text-slate-400 md:text-xs">{formatDateRu(deal.date)}</span>
+                    {deal.paymentType === "invoice" && (
+                      <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">📄 −6%</span>
+                    )}
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 md:gap-x-6">
                     <div className="flex items-center gap-1">
@@ -590,6 +647,9 @@ export default function FinancePage() {
                     }`}>
                       {deal.totalMargin >= 0 ? "+" : ""}{formatRub(deal.totalMargin)}
                     </p>
+                    {deal.paymentType === "invoice" && deal.taxAmount > 0 && (
+                      <p className="text-[9px] text-amber-600">−{formatRub(deal.taxAmount)} налог</p>
+                    )}
                   </div>
                   <button
                     onClick={(e) => {
@@ -700,6 +760,56 @@ export default function FinancePage() {
                     onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                   />
+                </div>
+
+                {/* Способ оплаты в режиме редактирования */}
+                <div className="rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 p-3 md:p-4">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:text-xs">💳 Способ оплаты</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditForm({ ...editForm, paymentType: "cash" });
+                        // Сохраняем сразу
+                        fetch("/api/deals", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: selectedDeal.id, paymentType: "cash" }),
+                        }).then(r => r.json()).then(updated => {
+                          setSelectedDeal(updated);
+                          fetchDeals();
+                        });
+                      }}
+                      className={`flex-1 rounded-xl py-2 text-xs font-semibold transition active:scale-95 ${
+                        selectedDeal.paymentType === "cash" && editForm.paymentType !== "invoice"
+                          ? "bg-emerald-500 text-white shadow-md"
+                          : "bg-white text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      💵 Наличные
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditForm({ ...editForm, paymentType: "invoice" });
+                        fetch("/api/deals", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: selectedDeal.id, paymentType: "invoice" }),
+                        }).then(r => r.json()).then(updated => {
+                          setSelectedDeal(updated);
+                          fetchDeals();
+                        });
+                      }}
+                      className={`flex-1 rounded-xl py-2 text-xs font-semibold transition active:scale-95 ${
+                        selectedDeal.paymentType === "invoice" || editForm.paymentType === "invoice"
+                          ? "bg-indigo-500 text-white shadow-md"
+                          : "bg-white text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      📄 По счёту (−6%)
+                    </button>
+                  </div>
                 </div>
 
                 {/* Предпросмотр маржи */}
@@ -844,6 +954,29 @@ export default function FinancePage() {
                     </div>
                   </div>
 
+                  {/* Способ оплаты */}
+                  <div className="rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 p-3 md:p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{selectedDeal.paymentType === "invoice" ? "📄" : "💵"}</span>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:text-xs">
+                            {selectedDeal.paymentType === "invoice" ? "По счёту" : "Наличные"}
+                          </p>
+                          {selectedDeal.paymentType === "invoice" && (
+                            <p className="text-[9px] text-amber-600">Налог 6%: −{formatRub(selectedDeal.taxAmount)}</p>
+                          )}
+                        </div>
+                      </div>
+                      {selectedDeal.paymentType === "invoice" && (
+                        <div className="text-right">
+                          <p className="text-[10px] text-slate-400">К получению</p>
+                          <p className="text-xs font-bold text-indigo-600">{formatRub(selectedDeal.totalWithTax)}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Заметки */}
                   {selectedDeal.notes && (
                     <div className="rounded-xl bg-slate-50 p-3 md:p-4">
@@ -976,6 +1109,7 @@ export default function FinancePage() {
                         purchaseAmount: String(selectedDeal.purchaseAmount),
                         workAmount: String(selectedDeal.workAmount),
                         materialsAmount: String(selectedDeal.materialsAmount),
+                        paymentType: selectedDeal.paymentType || "cash",
                         notes: selectedDeal.notes || "",
                       });
                       setEditMode(true);

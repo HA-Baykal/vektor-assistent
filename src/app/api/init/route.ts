@@ -87,6 +87,20 @@ export async function GET() {
     `);
     logs.push("✅ allowed_users — OK");
 
+    // Добавляем новые колонки для старых таблиц
+    try {
+      await db.execute(sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS payment_type VARCHAR(20) NOT NULL DEFAULT 'cash'`);
+      logs.push(`✅ Колонка payment_type добавлена`);
+    } catch { logs.push(`ℹ️ Колонка payment_type уже существует`); }
+    try {
+      await db.execute(sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS tax_amount INTEGER NOT NULL DEFAULT 0`);
+      logs.push(`✅ Колонка tax_amount добавлена`);
+    } catch { logs.push(`ℹ️ Колонка tax_amount уже существует`); }
+    try {
+      await db.execute(sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS total_with_tax INTEGER NOT NULL DEFAULT 0`);
+      logs.push(`✅ Колонка total_with_tax добавлена`);
+    } catch { logs.push(`ℹ️ Колонка total_with_tax уже существует`); }
+
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS invite_codes (
         id SERIAL PRIMARY KEY,

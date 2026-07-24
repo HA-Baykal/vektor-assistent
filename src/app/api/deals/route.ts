@@ -6,6 +6,13 @@ import { parseInput } from "@/lib/parser";
 
 export const dynamic = "force-dynamic";
 
+// Помощник расчёта налога (6% при оплате по счёту)
+function calcTax(saleAmount: number, workAmount: number, paymentType: string): number {
+  if (paymentType !== "invoice") return 0;
+  const totalIncome = saleAmount + workAmount;
+  return Math.round(totalIncome * 0.06);
+}
+
 // Тип для записи в логе действий
 type ActivityEntry = {
   action: string;
@@ -97,6 +104,10 @@ export async function POST(request: Request) {
           },
         ];
 
+        const paymentType = deal.paymentType || "cash";
+        const taxAmount = calcTax(deal.saleAmount, deal.workAmount, paymentType);
+        const marginWithTax = margin - taxAmount;
+
         const [row] = await db
           .insert(deals)
           .values({
@@ -110,7 +121,10 @@ export async function POST(request: Request) {
             materialsAmount: deal.materialsAmount,
             equipmentMargin: deal.saleAmount - deal.purchaseAmount,
             workMargin: deal.workAmount - deal.materialsAmount,
-            totalMargin: margin,
+            totalMargin: marginWithTax,
+            paymentType,
+            taxAmount,
+            totalWithTax: deal.saleAmount + deal.workAmount - taxAmount,
             notes: deal.notes,
             activityLog: JSON.stringify(log),
           })
@@ -125,14 +139,16 @@ export async function POST(request: Request) {
   const purchaseAmount = direct.purchaseAmount || 0;
   const workAmount = direct.workAmount || 0;
   const materialsAmount = direct.materialsAmount || 0;
-  const margin = saleAmount - purchaseAmount + workAmount - materialsAmount;
+  const paymentType = direct.paymentType || "cash";
+  const taxAmount = calcTax(saleAmount, workAmount, paymentType);
+  const margin = saleAmount - purchaseAmount + workAmount - materialsAmount - taxAmount;
   const dealNumber = await getNextDealNumber();
 
   const log: ActivityEntry[] = [
     {
       action: "Сделка создана",
       timestamp: now(),
-      details: `${direct.category || "Объект"} | Продажа: ${saleAmount}₽, Закупка: ${purchaseAmount}₽, Монтаж: ${workAmount}₽, Расход: ${materialsAmount}₽`,
+      details: `${direct.category || "Объект"} | Продажа: ${saleAmount}₽, Закупка: ${purchaseAmount}₽, Монтаж: ${workAmount}₽, Расход: ${materialsAmount}₽${paymentType === "invoice" ? `, Налог 6%: ${taxAmount}₽` : ""}`,
       delta: { saleAmount, purchaseAmount, workAmount, materialsAmount },
     },
   ];
@@ -151,6 +167,9 @@ export async function POST(request: Request) {
       equipmentMargin: saleAmount - purchaseAmount,
       workMargin: workAmount - materialsAmount,
       totalMargin: margin,
+      paymentType,
+      taxAmount,
+      totalWithTax: saleAmount + workAmount - taxAmount,
       notes: direct.notes || null,
       activityLog: JSON.stringify(log),
     })
@@ -272,15 +291,33 @@ export async function PATCH(request: Request) {
     });
   }
 
+  // Способ оплаты (наличные / по счёту)
+  if (updates.paymentType !== undefined) {
+    const oldLabel = existing.paymentType === "invoice" ? "По счёту" : "Наличные";
+    const newLabel = updates.paymentType === "invoice" ? "По счёту" : "Наличные";
+    updatedFields.paymentType = updates.paymentType;
+    logEntries.push({
+      action: "💳 Способ оплаты изменён",
+      timestamp: now(),
+      details: `${oldLabel} → ${newLabel}`,
+    });
+  }
+
   // Берём текущие значения (обновлённые или старые)
   const finalSale = typeof updatedFields.saleAmount === 'number' ? updatedFields.saleAmount : existing.saleAmount;
   const finalPurchase = typeof updatedFields.purchaseAmount === 'number' ? updatedFields.purchaseAmount : existing.purchaseAmount;
   const finalWork = typeof updatedFields.workAmount === 'number' ? updatedFields.workAmount : existing.workAmount;
   const finalMaterials = typeof updatedFields.materialsAmount === 'number' ? updatedFields.materialsAmount : existing.materialsAmount;
+  const finalPaymentType = typeof updatedFields.paymentType === 'string' ? updatedFields.paymentType : existing.paymentType;
+
+  // Пересчитываем налог
+  const finalTax = calcTax(finalSale, finalWork, finalPaymentType);
+  updatedFields.taxAmount = finalTax;
+  updatedFields.totalWithTax = finalSale + finalWork - finalTax;
 
   updatedFields.equipmentMargin = finalSale - finalPurchase;
   updatedFields.workMargin = finalWork - finalMaterials;
-  updatedFields.totalMargin = finalSale - finalPurchase + finalWork - finalMaterials;
+  updatedFields.totalMargin = finalSale - finalPurchase + finalWork - finalMaterials - finalTax;
 
   // Добавляем запись о пересчёте маржи
   const oldMargin = existing.totalMargin;

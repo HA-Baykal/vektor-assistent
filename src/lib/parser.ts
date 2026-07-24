@@ -14,6 +14,7 @@ export type ParsedDeal = {
   purchaseAmount: number;
   workAmount: number;
   materialsAmount: number;
+  paymentType?: string;
   notes?: string;
 };
 
