@@ -1,109 +1,147 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { tasks, allowedUsers } from "@/db/schema";
-import { eq, gte, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { sendMessage } from "@/lib/telegram";
 import { formatDateRu, formatWeekdayRu } from "@/lib/parser";
+import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Проверяет, что сейчас ~7 утра по Иркутску (UTC+8)
-function isIrkutskMorning(): boolean {
+const CRON_SECRET = process.env.CRON_SECRET || "daily7am_irk";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://vektor-assistent.vercel.app";
+
+// Получает Иркутскую дату (UTC+8)
+function getIrkutskDate(addDays: number = 0): string {
   const now = new Date();
-  // Иркутск = UTC+8
-  const irkHour = (now.getUTCHours() + 8) % 24;
-  // 7:00 ± 10 минут (чтобы cron не пропустил)
-  return irkHour === 7 && now.getUTCMinutes() < 15;
+  // UTC+8
+  const irk = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  irk.setDate(irk.getDate() + addDays);
+  return irk.toISOString().slice(0, 10);
 }
 
-// Секретный ключ для защиты cron от посторонних.
-// По умолчанию совпадает с тем, что прописан в vercel.json.
-const CRON_SECRET = process.env.CRON_SECRET || "daily7am_irk";
+// Создаёт таблицу если её нет
+async function ensureTable() {
+  try {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS allowed_users (
+      id SERIAL PRIMARY KEY,
+      chat_id VARCHAR(100) NOT NULL UNIQUE,
+      user_name VARCHAR(255) DEFAULT '',
+      access_level VARCHAR(20) NOT NULL DEFAULT 'read',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`);
+  } catch {}
+}
+
+// Форматирует задачи в список
+function formatTaskList(taskList: typeof tasks.$inferSelect[]): string {
+  if (taskList.length === 0) return "";
+  return taskList
+    .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"))
+    .map((t, i) => {
+      const timeStr = t.time ? ` ${t.time.slice(0, 5)}` : "";
+      return `  ${i + 1}.${timeStr} — ${t.text}`;
+    })
+    .join("\n");
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const secret = searchParams.get("secret");
+  const force = searchParams.get("force") === "true";
 
-  // Проверяем секрет (если не совпадает — пропускаем)
+  // Проверяем секрет
   if (secret !== CRON_SECRET) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  // Проверяем время — Иркутск 7 утра?
-  if (!isIrkutskMorning()) {
-    const irkHour = (new Date().getUTCHours() + 8) % 24;
-    return NextResponse.json({
-      ok: false,
-      message: `Not 7 AM Irkutsk yet, current hour: ${irkHour}`,
-    });
-  }
-
   try {
-    // Получаем сегодняшнюю дату по Иркутску
-    const now = new Date();
-    const irkDate = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-    const todayStr = irkDate.toISOString().slice(0, 10);
+    await ensureTable();
 
-    // Получаем задачи на сегодня (активные)
+    // Получаем даты по Иркутску
+    const todayStr = getIrkutskDate(0);
+    const tomorrowStr = getIrkutskDate(1);
+
+    console.log(`[CRON] Иркутск сегодня: ${todayStr}, завтра: ${tomorrowStr}`);
+
+    // Задачи на сегодня (активные)
     const todayTasks = await db
       .select()
       .from(tasks)
       .where(and(eq(tasks.date, todayStr), eq(tasks.status, "active")))
       .orderBy(tasks.time);
 
-    if (todayTasks.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        message: "Нет задач на сегодня",
-        sent: 0,
-      });
+    // Задачи на завтра (активные)
+    const tomorrowTasks = await db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.date, tomorrowStr), eq(tasks.status, "active")))
+      .orderBy(tasks.time);
+
+    // Собираем сообщение
+    const todayLabel = `${formatDateRu(todayStr)}, ${formatWeekdayRu(todayStr)}`;
+    const tomorrowLabel = `${formatDateRu(tomorrowStr)}, ${formatWeekdayRu(tomorrowStr)}`;
+
+    let message = `☀️ <b>Доброе утро!</b>\n\n📅 <b>${todayLabel}</b>\n\n`;
+
+    // Сегодняшние задачи
+    if (todayTasks.length > 0) {
+      message += `📋 <b>Задачи на сегодня:</b>\n${formatTaskList(todayTasks)}\n`;
+    } else {
+      message += `📋 <b>Задачи на сегодня:</b>\n   ⚠️ На сегодня дел нет. <b>Иди ищи работу!!</b>\n`;
     }
 
-    // Форматируем задачи
-    const dateLabel = formatDateRu(todayStr);
-    const weekday = formatWeekdayRu(todayStr);
+    // Завтрашние задачи
+    message += `\n📅 <b>НЕ ЗАБУДЬ НА ЗАВТРА!</b> • ${tomorrowLabel}\n`;
 
-    const taskLines = todayTasks
-      .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"))
-      .map((t, i) => {
-        const timeStr = t.time ? ` ${t.time}` : "";
-        return `${i + 1}.${timeStr} — ${t.text}`;
-      })
-      .join("\n");
+    if (tomorrowTasks.length > 0) {
+      message += `📋 <b>Задачи на завтра:</b>\n${formatTaskList(tomorrowTasks)}\n`;
+    } else {
+      message += `📋 <b>Задачи на завтра:</b>\n   ⚠️ На завтра дел нет, <b>БЕЗДЕЛЬНИК!!!</b>\n`;
+    }
 
-    const message =
-      `☀️ <b>Доброе утро!</b>\n\n` +
-      `📅 <b>${dateLabel}, ${weekday}</b>\n\n` +
-      `📋 <b>Задачи на сегодня:</b>\n${taskLines}\n\n` +
-      `📱 Открыть: https://vektor-assistent.vercel.app`;
+    // Кнопка открыть приложение
+    message += `\n📱 <a href="${APP_URL}">Открыть Вектор Ассистент</a>`;
 
-    // Получаем всех пользователей Telegram с доступом
+    // Получаем всех пользователей
     const users = await db.select().from(allowedUsers);
-    const chatIds = users.map((u) => u.chatId);
+
+    if (users.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        message: "Нет пользователей для отправки",
+        sent: 0,
+        today: todayTasks.length,
+        tomorrow: tomorrowTasks.length,
+      });
+    }
 
     // Отправляем всем
     let sentCount = 0;
     const errors: string[] = [];
 
-    for (const chatId of chatIds) {
+    for (const user of users) {
       try {
-        await sendMessage(Number(chatId), message);
+        await sendMessage(Number(user.chatId), message);
         sentCount++;
       } catch (err: any) {
-        errors.push(`${chatId}: ${err?.message || "error"}`);
+        errors.push(`${user.chatId}: ${err?.message || "error"}`);
       }
     }
 
     return NextResponse.json({
       ok: true,
-      message: `Уведомления отправлены ${sentCount} пользователям`,
       sent: sentCount,
       total: users.length,
+      today: todayTasks.length,
+      tomorrow: tomorrowTasks.length,
+      todayStr,
+      tomorrowStr,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error: any) {
-    console.error("Cron daily tasks error:", error);
+    console.error("[CRON] Error:", error);
     return NextResponse.json(
       { ok: false, error: String(error?.message || error) },
       { status: 500 }
