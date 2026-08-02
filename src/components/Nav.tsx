@@ -8,6 +8,7 @@ const links = [
   { href: "/tasks", label: "Задачи", icon: "✅", shortLabel: "Задачи" },
   { href: "/finance", label: "Финансы", icon: "💰", shortLabel: "Финансы" },
   { href: "/reports", label: "Отчёты", icon: "📊", shortLabel: "Отчёты" },
+  { href: "/estimate", label: "Смета", icon: "🧾", shortLabel: "Смета" },
 ];
 
 export default function Nav({ isMobile = false }: { isMobile?: boolean }) {
